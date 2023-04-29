@@ -15,7 +15,7 @@ namespace Jint.Runtime.Interop
 
             foreach (var parameter in Parameters)
             {
-                if (Attribute.IsDefined(parameter, typeof(ParamArrayAttribute)))
+                if (Attribute.IsDefined(parameter, typeof(ParamArrayAttribute)) || parameter!.Name!.StartsWith("params_"))
                 {
                     HasParams = true;
                     break;

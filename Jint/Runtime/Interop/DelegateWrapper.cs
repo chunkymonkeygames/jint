@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Globalization;
 using System.Reflection;
 using Jint.Extensions;
@@ -28,7 +29,7 @@ namespace Jint.Runtime.Interop
             _delegateContainsParamsArgument = false;
             foreach (var p in parameterInfos)
             {
-                if (Attribute.IsDefined(p, typeof(ParamArrayAttribute)))
+                if (Attribute.IsDefined(p, typeof(ParamArrayAttribute)) || p!.Name!.StartsWith("params_"))
                 {
                     _delegateContainsParamsArgument = true;
                     break;
