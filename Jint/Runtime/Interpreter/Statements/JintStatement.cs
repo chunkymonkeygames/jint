@@ -97,7 +97,8 @@ namespace Jint.Runtime.Interpreter.Statements
 
             if (result is null)
             {
-                ExceptionHelper.ThrowArgumentOutOfRangeException(nameof(statement.Type), $"unsupported statement type '{statement.Type}'");
+                ExceptionHelper.ThrowArgumentOutOfRangeException(nameof(statement.Type), $"unsupported statement type '{statement.Type}' by " +
+                    $"{statement.Type.GetType().AssemblyQualifiedName};  expected {Nodes.ExpressionStatement.GetType().AssemblyQualifiedName}");
             }
 
             return result;
