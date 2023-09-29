@@ -160,7 +160,7 @@ namespace Jint.Runtime.Interop
 
             if (explicitMethods?.Count > 0)
             {
-                return new MethodAccessor(MethodDescriptor.Build(explicitMethods));
+                return new MethodAccessor(type, memberName, MethodDescriptor.Build(explicitMethods));
             }
 
             // try to find explicit indexer implementations
@@ -193,7 +193,7 @@ namespace Jint.Runtime.Interop
 
                 if (matches.Count > 0)
                 {
-                    return new MethodAccessor(MethodDescriptor.Build(matches));
+                    return new MethodAccessor(type, memberName, MethodDescriptor.Build(matches));
                 }
             }
 
@@ -267,11 +267,11 @@ namespace Jint.Runtime.Interop
 
             // if no properties were found then look for a method
             List<MethodInfo>? methods = null;
-            foreach (var m in type.GetMethods(bindingFlags))
+            void AddMethod(MethodInfo m)
             {
                 if (!Filter(engine, m))
                 {
-                    continue;
+                    return;
                 }
 
                 foreach (var name in typeResolverMemberNameCreator(m))
@@ -284,22 +284,49 @@ namespace Jint.Runtime.Interop
                 }
             }
 
+            foreach (var m in type.GetMethods(bindingFlags))
+            {
+                AddMethod(m);
+            }
+
+            foreach (var iface in type.GetInterfaces())
+            {
+                foreach (var m in iface.GetMethods())
+                {
+                    AddMethod(m);
+                }
+            }
+
             // TPC: need to grab the extension methods here - for overloads
             if (engine._extensionMethods.TryGetExtensionMethods(type, out var extensionMethods))
             {
                 foreach (var methodInfo in extensionMethods)
                 {
-                    if (memberNameComparer.Equals(methodInfo.Name, memberName))
-                    {
-                        methods ??= new List<MethodInfo>();
-                        methods.Add(methodInfo);
-                    }
+                    AddMethod(methodInfo);
+                }
+            }
+
+            // Add Object methods to interface
+            if (type.IsInterface)
+            {
+                foreach (var m in typeof(object).GetMethods(bindingFlags))
+                {
+                    AddMethod(m);
                 }
             }
 
             if (methods?.Count > 0)
             {
-                accessor = new MethodAccessor(MethodDescriptor.Build(methods));
+                accessor = new MethodAccessor(type, memberName, MethodDescriptor.Build(methods));
+                return true;
+            }
+
+            // look for nested type
+            var nestedType = type.GetNestedType(memberName, bindingFlags);
+            if (nestedType != null)
+            {
+                var typeReference = TypeReference.CreateTypeReference(engine, nestedType);
+                accessor = new NestedTypeAccessor(typeReference, memberName);
                 return true;
             }
 
@@ -341,7 +368,7 @@ namespace Jint.Runtime.Interop
 
                 if (equals && x.Length > 1)
                 {
-#if NETSTANDARD2_1_OR_GREATER
+#if SUPPORTS_SPAN_PARSE
                     equals = x.AsSpan(1).SequenceEqual(y.AsSpan(1));
 #else
                     equals = x.Substring(1) == y.Substring(1);

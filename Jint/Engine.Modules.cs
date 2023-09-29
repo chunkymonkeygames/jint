@@ -130,14 +130,14 @@ namespace Jint
             module.Link();
         }
 
-        private JsValue EvaluateModule(string specifier, ModuleRecord cyclicModule)
+        private JsValue EvaluateModule(string specifier, ModuleRecord module)
         {
             var ownsContext = _activeEvaluationContext is null;
             _activeEvaluationContext ??= new EvaluationContext(this);
             JsValue evaluationResult;
             try
             {
-                evaluationResult = cyclicModule.Evaluate();
+                evaluationResult = module.Evaluate();
             }
             finally
             {
@@ -148,13 +148,13 @@ namespace Jint
             }
 
             // This should instead be returned and resolved in ImportModule(specifier) only so Host.ImportModuleDynamically can use this promise
-            if (evaluationResult is not PromiseInstance promise)
+            if (evaluationResult is not JsPromise promise)
             {
                 ExceptionHelper.ThrowInvalidOperationException($"Error while evaluating module: Module evaluation did not return a promise: {evaluationResult.Type}");
             }
             else if (promise.State == PromiseState.Rejected)
             {
-                var location = cyclicModule is CyclicModuleRecord cyclicModuleRecord
+                var location = module is CyclicModuleRecord cyclicModuleRecord
                     ? cyclicModuleRecord.AbnormalCompletionLocation
                     : Location.From(new Position(), new Position());
 

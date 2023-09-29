@@ -281,7 +281,6 @@ namespace Jint
 
                     if (childType != Nodes.FunctionDeclaration
                         && childType != Nodes.ArrowFunctionExpression
-                        && childType != Nodes.ArrowParameterPlaceHolder
                         && childType != Nodes.FunctionExpression
                         && !childNode.ChildNodes.IsEmpty())
                     {
@@ -308,9 +307,7 @@ namespace Jint
                         var import = (ImportDeclaration) childNode;
                         import.GetImportEntries(_importEntries, _requestedModules);
                     }
-                    else if (childNode.Type == Nodes.ExportAllDeclaration ||
-                             childNode.Type == Nodes.ExportDefaultDeclaration ||
-                             childNode.Type == Nodes.ExportNamedDeclaration)
+                    else if (childNode.Type is Nodes.ExportAllDeclaration or Nodes.ExportDefaultDeclaration or Nodes.ExportNamedDeclaration)
                     {
                         _exportEntries ??= new();
                         _requestedModules ??= new();

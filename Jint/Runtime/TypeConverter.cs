@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using Esprima;
 using Esprima.Ast;
@@ -49,15 +50,17 @@ namespace Jint.Runtime
         // primitive  types range end
         Object = 256,
 
+        PrivateName = 512,
+
         // internal usage
-        ObjectEnvironmentRecord = 512,
-        RequiresCloning = 1024,
-        Module = 2048,
+        ObjectEnvironmentRecord = 1024,
+        RequiresCloning = 2048,
+        Module = 4096,
 
         // the object doesn't override important GetOwnProperty etc which change behavior
-        PlainObject = 4096,
+        PlainObject = 8192,
         // our native array
-        Array = 8192,
+        Array = 16384,
 
         Primitive = Boolean | String | Number | Integer | BigInt | Symbol,
         InternalFlags = ObjectEnvironmentRecord | RequiresCloning | PlainObject | Array | Module
@@ -693,7 +696,7 @@ namespace Jint.Runtime
                 if (str.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 {
                     // we get better precision if we don't hit floating point parsing that is performed by Esprima
-#if NETSTANDARD2_1_OR_GREATER
+#if SUPPORTS_SPAN_PARSE
                     var source = str.AsSpan(2);
 #else
                     var source = str.Substring(2);
@@ -842,40 +845,45 @@ namespace Jint.Runtime
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static string ToString(long i)
         {
-            return i >= 0 && i < intToString.Length
-                ? intToString[i]
+            var temp = intToString;
+            return (ulong) i < (ulong) temp.Length
+                ? temp[i]
                 : i.ToString();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static string ToString(int i)
         {
-            return i >= 0 && i < intToString.Length
-                ? intToString[i]
+            var temp = intToString;
+            return (uint) i < (uint) temp.Length
+                ? temp[i]
                 : i.ToString();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static string ToString(uint i)
         {
-            return i < (uint) intToString.Length
-                ? intToString[i]
+            var temp = intToString;
+            return i < (uint) temp.Length
+                ? temp[i]
                 : i.ToString();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static string ToString(char c)
         {
-            return c >= 0 && c < charToString.Length
-                ? charToString[c]
+            var temp = charToString;
+            return (uint) c < (uint) temp.Length
+                ? temp[c]
                 : c.ToString();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         internal static string ToString(ulong i)
         {
-            return i >= 0 && i < (ulong) intToString.Length
-                ? intToString[i]
+            var temp = intToString;
+            return i < (ulong) temp.Length
+                ? temp[i]
                 : i.ToString();
         }
 
@@ -926,8 +934,8 @@ namespace Jint.Runtime
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static JsValue ToPropertyKey(JsValue o)
         {
-            const InternalTypes stringOrSymbol = InternalTypes.String | InternalTypes.Symbol;
-            return (o._type & stringOrSymbol) != 0
+            const InternalTypes PropertyKeys = InternalTypes.String | InternalTypes.Symbol | InternalTypes.PrivateName;
+            return (o._type & PropertyKeys) != 0
                 ? o
                 : ToPropertyKeyNonString(o);
         }
@@ -935,9 +943,9 @@ namespace Jint.Runtime
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static JsValue ToPropertyKeyNonString(JsValue o)
         {
-            const InternalTypes stringOrSymbol = InternalTypes.String | InternalTypes.Symbol;
+            const InternalTypes PropertyKeys = InternalTypes.String | InternalTypes.Symbol | InternalTypes.PrivateName;
             var primitive = ToPrimitive(o, Types.String);
-            return (primitive._type & stringOrSymbol) != 0
+            return (primitive._type & PropertyKeys) != 0
                 ? primitive
                 : ToStringNonString(primitive);
         }
@@ -982,6 +990,8 @@ namespace Jint.Runtime
                     return "undefined";
                 case InternalTypes.Null:
                     return "null";
+                case InternalTypes.PrivateName:
+                    return o.ToString();
                 case InternalTypes.Object when o is IObjectWrapper p:
                     return p.Target?.ToString()!;
                 default:
@@ -1138,9 +1148,8 @@ namespace Jint.Runtime
             for (var i = 0; i < arguments.Length; i++)
             {
                 var jsValue = arguments[i];
-                var paramType = method.Parameters[i].ParameterType;
 
-                var parameterScore = CalculateMethodParameterScore(engine, jsValue, paramType);
+                var parameterScore = CalculateMethodParameterScore(engine, method.Parameters[i], jsValue);
                 if (parameterScore < 0)
                 {
                     return parameterScore;
@@ -1218,12 +1227,10 @@ namespace Jint.Runtime
         /// <summary>
         /// Determines how well parameter type matches target method's type.
         /// </summary>
-        private static int CalculateMethodParameterScore(
-            Engine engine,
-            JsValue jsValue,
-            Type paramType)
+        private static int CalculateMethodParameterScore(Engine engine, ParameterInfo parameter, JsValue parameterValue)
         {
-            var objectValue = jsValue.ToObject();
+            var paramType = parameter.ParameterType;
+            var objectValue = parameterValue.ToObject();
             var objectValueType = objectValue?.GetType();
 
             if (objectValueType == paramType)
@@ -1233,7 +1240,7 @@ namespace Jint.Runtime
 
             if (objectValue is null)
             {
-                if (!TypeIsNullable(paramType))
+                if (!parameter.IsOptional && !TypeIsNullable(paramType))
                 {
                     // this is bad
                     return -1;
@@ -1254,18 +1261,18 @@ namespace Jint.Runtime
                 return 5;
             }
 
-            if (paramType == typeof(int) && jsValue.IsInteger())
+            if (paramType == typeof(int) && parameterValue.IsInteger())
             {
                 return 0;
             }
 
             if (paramType == typeof(float) && objectValueType == typeof(double))
             {
-                return jsValue.IsInteger() ? 1 : 2;
+                return parameterValue.IsInteger() ? 1 : 2;
             }
 
             if (paramType.IsEnum &&
-                jsValue is JsNumber jsNumber
+                parameterValue is JsNumber jsNumber
                 && jsNumber.IsInteger()
                 && paramType.GetEnumUnderlyingType() == typeof(int)
                 && Enum.IsDefined(paramType, jsNumber.AsInteger()))
@@ -1280,7 +1287,7 @@ namespace Jint.Runtime
                 return 1;
             }
 
-            if (jsValue.IsArray() && paramType.IsArray)
+            if (parameterValue.IsArray() && paramType.IsArray)
             {
                 // we have potential, TODO if we'd know JS array's internal type we could have exact match
                 return 2;
@@ -1311,7 +1318,7 @@ namespace Jint.Runtime
                 }
             }
 
-            if (ReflectionExtensions.TryConvertViaTypeCoercion(paramType, engine.Options.Interop.ValueCoercion, jsValue, out _))
+            if (ReflectionExtensions.TryConvertViaTypeCoercion(paramType, engine.Options.Interop.ValueCoercion, parameterValue, out _))
             {
                 // gray JS zone where we start to do odd things
                 return 10;

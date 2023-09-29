@@ -316,7 +316,7 @@ namespace Jint.Runtime.Interpreter.Expressions
             }
 
             // if we did string concatenation in-place, we don't need to update records, objects might have evil setters
-            if (!wasMutatedInPlace || lref.GetBase() is not EnvironmentRecord)
+            if (!wasMutatedInPlace || lref.Base is not EnvironmentRecord)
             {
                 engine.PutValue(lref, newLeftValue!);
             }
@@ -398,12 +398,13 @@ namespace Jint.Runtime.Interpreter.Expressions
                 var engine = context.Engine;
                 var env = engine.ExecutionContext.LexicalEnvironment;
                 var strict = StrictModeScope.IsStrictModeCode;
+                var identifier = left.Identifier;
                 if (JintEnvironment.TryGetIdentifierEnvironmentWithBinding(
                     env,
-                    left.Identifier,
+                    identifier,
                     out var environmentRecord))
                 {
-                    if (strict && hasEvalOrArguments && left.Identifier.Key != KnownKeys.Eval)
+                    if (strict && hasEvalOrArguments && identifier.Key != KnownKeys.Eval)
                     {
                         ExceptionHelper.ThrowSyntaxError(engine.Realm, "Invalid assignment target");
                     }
@@ -418,10 +419,10 @@ namespace Jint.Runtime.Interpreter.Expressions
 
                     if (right._expression.IsFunctionDefinition())
                     {
-                        ((FunctionInstance) rval).SetFunctionName(left.Identifier.StringValue);
+                        ((FunctionInstance) rval).SetFunctionName(identifier.Value);
                     }
 
-                    environmentRecord.SetMutableBinding(left.Identifier, rval, strict);
+                    environmentRecord.SetMutableBinding(identifier, rval, strict);
                     return rval;
                 }
 

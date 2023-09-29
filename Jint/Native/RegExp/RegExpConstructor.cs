@@ -72,7 +72,7 @@ namespace Jint.Native.RegExp
 
             JsValue p;
             JsValue f;
-            if (pattern is RegExpInstance regExpInstance)
+            if (pattern is JsRegExp regExpInstance)
             {
                 p = regExpInstance.Source;
                 f = flags.IsUndefined() ? regExpInstance.Flags : flags;
@@ -92,7 +92,7 @@ namespace Jint.Native.RegExp
             return RegExpInitialize(r, p, f);
         }
 
-        private ObjectInstance RegExpInitialize(RegExpInstance r, JsValue pattern, JsValue flags)
+        private ObjectInstance RegExpInitialize(JsRegExp r, JsValue pattern, JsValue flags)
         {
             var p = pattern.IsUndefined() ? "" : TypeConverter.ToString(pattern);
             if (string.IsNullOrEmpty(p))
@@ -104,17 +104,15 @@ namespace Jint.Native.RegExp
 
             try
             {
-                var options = new ScannerOptions();
-                var scanner = new Scanner("/" + p + "/" + flags, options);
+                var regExpParseResult = Scanner.AdaptRegExp(p, f, compiled: false, _engine.Options.Constraints.RegexTimeout);
 
-                // seems valid
-                r.Value = scanner.ParseRegex(p, f, options.RegexTimeout);
-
-                var timeout = _engine.Options.Constraints.RegexTimeout;
-                if (timeout.Ticks > 0)
+                if (!regExpParseResult.Success)
                 {
-                    r.Value = new Regex(r.Value.ToString(), r.Value.Options, timeout);
+                    ExceptionHelper.ThrowSyntaxError(_realm, $"Unsupported regular expression. {regExpParseResult.ConversionError!.Description}");
                 }
+
+                r.Value = regExpParseResult.Regex!;
+                r.ParseResult = regExpParseResult;
             }
             catch (Exception ex)
             {
@@ -129,41 +127,31 @@ namespace Jint.Native.RegExp
             return r;
         }
 
-        private RegExpInstance RegExpAlloc(JsValue newTarget)
+        private JsRegExp RegExpAlloc(JsValue newTarget)
         {
             var r = OrdinaryCreateFromConstructor(
                 newTarget,
                 static intrinsics => intrinsics.RegExp.PrototypeObject,
-                static (Engine engine, Realm _, object? _) => new RegExpInstance(engine));
+                static (Engine engine, Realm _, object? _) => new JsRegExp(engine));
             return r;
         }
 
-        public RegExpInstance Construct(Regex regExp, string source, string flags)
+        public JsRegExp Construct(Regex regExp, string source, string flags, RegExpParseResult regExpParseResult = default)
         {
-            var r = new RegExpInstance(Engine);
-            r._prototype = PrototypeObject;
-
-            r.Flags = flags;
+            var r = RegExpAlloc(this);
+            r.Value = regExp;
             r.Source = source;
-
-            var timeout = _engine.Options.Constraints.RegexTimeout;
-            if (timeout.Ticks > 0)
-            {
-                r.Value = new Regex(regExp.ToString(), regExp.Options, timeout);
-            }
-            else
-            {
-                r.Value = regExp;
-            }
+            r.Flags = flags;
+            r.ParseResult = regExpParseResult;
 
             RegExpInitialize(r);
 
             return r;
         }
 
-        private static void RegExpInitialize(RegExpInstance r)
+        private static void RegExpInitialize(JsRegExp r)
         {
-            r.SetOwnProperty(RegExpInstance.PropertyLastIndex, new PropertyDescriptor(0, PropertyFlag.OnlyWritable));
+            r.SetOwnProperty(JsRegExp.PropertyLastIndex, new PropertyDescriptor(0, PropertyFlag.OnlyWritable));
         }
     }
 }

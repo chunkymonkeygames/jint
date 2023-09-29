@@ -1,11 +1,12 @@
 using System.Text.RegularExpressions;
+using Esprima;
 using Jint.Native.Object;
 using Jint.Runtime;
 using Jint.Runtime.Descriptors;
 
 namespace Jint.Native.RegExp
 {
-    public sealed class RegExpInstance : ObjectInstance
+    public sealed class JsRegExp : ObjectInstance
     {
         internal const string regExpForMatchingAllCharacters = "(?:)";
         internal static readonly JsString PropertyLastIndex = new("lastIndex");
@@ -14,7 +15,7 @@ namespace Jint.Native.RegExp
 
         private PropertyDescriptor _prototypeDescriptor = null!;
 
-        public RegExpInstance(Engine engine)
+        public JsRegExp(Engine engine)
             : base(engine, ObjectClass.RegExp)
         {
             Source = regExpForMatchingAllCharacters;
@@ -61,6 +62,8 @@ namespace Jint.Native.RegExp
                 }
             }
         }
+
+        public RegExpParseResult ParseResult { get; set; }
 
         public bool DotAll { get; private set; }
         public bool Global { get; private set; }

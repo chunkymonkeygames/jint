@@ -17,12 +17,17 @@ namespace Jint.Native.ShadowRealm;
 /// </summary>
 public sealed class ShadowRealm : ObjectInstance
 {
-    private readonly JavaScriptParser _parser = new(new ParserOptions { Tolerant = false });
+    private readonly JavaScriptParser _parser;
     internal readonly Realm _shadowRealm;
     private readonly ExecutionContext _executionContext;
 
     internal ShadowRealm(Engine engine, ExecutionContext executionContext, Realm shadowRealm) : base(engine)
     {
+        _parser = new(new ParserOptions
+        {
+            Tolerant = false,
+            RegexTimeout = engine.Options.Constraints.RegexTimeout
+        });
         _executionContext = executionContext;
         _shadowRealm = shadowRealm;
     }
@@ -36,7 +41,9 @@ public sealed class ShadowRealm : ObjectInstance
     public JsValue ImportValue(string specifier, string exportName)
     {
         var callerRealm = _engine.Realm;
-        return ShadowRealmImportValue(specifier, exportName, callerRealm);
+        var value = ShadowRealmImportValue(specifier, exportName, callerRealm);
+        _engine.RunAvailableContinuations();
+        return value;
     }
 
     /// <summary>
@@ -208,9 +215,7 @@ public sealed class ShadowRealm : ObjectInstance
 
         var onFulfilled = new StepsFunction(_engine, callerRealm, exportNameString);
         var promiseCapability = PromiseConstructor.NewPromiseCapability(_engine, _engine.Realm.Intrinsics.Promise);
-        var value = PromiseOperations.PerformPromiseThen(_engine, (PromiseInstance) innerCapability.PromiseInstance, onFulfilled, callerRealm.Intrinsics.ThrowTypeError, promiseCapability);
-
-        _engine.RunAvailableContinuations();
+        var value = PromiseOperations.PerformPromiseThen(_engine, (JsPromise) innerCapability.PromiseInstance, onFulfilled, callerRealm.Intrinsics.ThrowTypeError, promiseCapability);
 
         return value;
     }

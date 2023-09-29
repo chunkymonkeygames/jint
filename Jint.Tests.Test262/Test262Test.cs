@@ -38,7 +38,7 @@ public abstract partial class Test262Test
                     throw new Exception("only script parsing supported");
                 }
 
-                var options = new ParserOptions { AdaptRegexp = true, Tolerant = false };
+                var options = new ParserOptions { RegExpParseMode = RegExpParseMode.AdaptToInterpreted, Tolerant = false };
                 var parser = new JavaScriptParser(options);
                 var script = parser.ParseScript(args.At(0).AsString());
 
@@ -56,7 +56,7 @@ public abstract partial class Test262Test
         o.FastSetProperty("detachArrayBuffer", new PropertyDescriptor(new ClrFunctionInstance(engine, "detachArrayBuffer",
             (_, args) =>
             {
-                var buffer = (ArrayBufferInstance) args.At(0);
+                var buffer = (JsArrayBuffer) args.At(0);
                 buffer.DetachArrayBuffer();
                 return JsValue.Undefined;
             }), true, true, true));
@@ -88,8 +88,9 @@ public abstract partial class Test262Test
     {
         if (file.Type == ProgramType.Module)
         {
-            engine.AddModule(file.FileName, builder => builder.AddSource(file.Program));
-            engine.ImportModule(file.FileName);
+            var specifier = "./" + Path.GetFileName(file.FileName);
+            engine.AddModule(specifier, builder => builder.AddSource(file.Program));
+            engine.ImportModule(specifier);
         }
         else
         {

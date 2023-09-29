@@ -26,7 +26,7 @@ namespace Jint.Native.DataView
             _prototypeDescriptor = new PropertyDescriptor(PrototypeObject, PropertyFlag.AllForbidden);
         }
 
-        public DataViewPrototype PrototypeObject { get; }
+        private DataViewPrototype PrototypeObject { get; }
 
         public override ObjectInstance Construct(JsValue[] arguments, JsValue newTarget)
         {
@@ -35,7 +35,7 @@ namespace Jint.Native.DataView
                 ExceptionHelper.ThrowTypeError(_realm);
             }
 
-            var buffer = arguments.At(0) as ArrayBufferInstance;
+            var buffer = arguments.At(0) as JsArrayBuffer;
             var byteOffset = arguments.At(1);
             var byteLength = arguments.At(2);
 
@@ -74,7 +74,7 @@ namespace Jint.Native.DataView
             var o = OrdinaryCreateFromConstructor(
                 newTarget,
                 static intrinsics => intrinsics.DataView.PrototypeObject,
-                static (Engine engine, Realm _, object? _) => new DataViewInstance(engine));
+                static (Engine engine, Realm _, object? _) => new JsDataView(engine));
 
             if (buffer.IsDetachedBuffer)
             {

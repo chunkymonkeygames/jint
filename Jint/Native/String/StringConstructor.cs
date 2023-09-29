@@ -60,7 +60,7 @@ namespace Jint.Native.String
                 return JsString.Create((char) TypeConverter.ToUint16(arguments[0]));
             }
 
-#if NETSTANDARD2_1_OR_GREATER
+#if SUPPORTS_SPAN_PARSE
             var elements = length < 512 ? stackalloc char[length] : new char[length];
 #else
             var elements = new char[length];
@@ -74,7 +74,7 @@ namespace Jint.Native.String
             return JsString.Create(new string(elements));
         }
 
-        private JsValue FromCodePoint(JsValue thisObj, JsValue[] arguments)
+        private JsValue FromCodePoint(JsValue thisObject, JsValue[] arguments)
         {
             var codeUnits = new List<JsValue>();
             string result = "";
@@ -117,7 +117,7 @@ namespace Jint.Native.String
         /// <summary>
         /// https://www.ecma-international.org/ecma-262/6.0/#sec-string.raw
         /// </summary>
-        private JsValue Raw(JsValue thisObj, JsValue[] arguments)
+        private JsValue Raw(JsValue thisObject, JsValue[] arguments)
         {
             var cooked = TypeConverter.ToObject(_realm, arguments.At(0));
             var raw = TypeConverter.ToObject(_realm, cooked.Get(JintTaggedTemplateExpression.PropertyRaw));

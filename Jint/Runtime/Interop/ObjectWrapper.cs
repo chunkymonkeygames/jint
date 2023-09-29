@@ -10,18 +10,19 @@ using Jint.Runtime.Interop.Reflection;
 
 namespace Jint.Runtime.Interop
 {
-	/// <summary>
-	/// Wraps a CLR instance
-	/// </summary>
-	public sealed class ObjectWrapper : ObjectInstance, IObjectWrapper, IEquatable<ObjectWrapper>
+    /// <summary>
+    /// Wraps a CLR instance
+    /// </summary>
+    public sealed class ObjectWrapper : ObjectInstance, IObjectWrapper, IEquatable<ObjectWrapper>
     {
         private readonly TypeDescriptor _typeDescriptor;
 
-        public ObjectWrapper(Engine engine, object obj)
+        public ObjectWrapper(Engine engine, object obj, Type? type = null)
             : base(engine)
         {
             Target = obj;
-            _typeDescriptor = TypeDescriptor.Get(obj.GetType());
+            ClrType = GetClrType(obj, type);
+            _typeDescriptor = TypeDescriptor.Get(ClrType);
             if (_typeDescriptor.LengthProperty is not null)
             {
                 // create a forwarder to produce length from Count or Length if one of them is present
@@ -32,6 +33,7 @@ namespace Jint.Runtime.Interop
         }
 
         public object Target { get; }
+        internal Type ClrType { get; }
 
         public override bool IsArrayLike => _typeDescriptor.IsArrayLike;
 
@@ -48,7 +50,7 @@ namespace Jint.Runtime.Interop
                 if (_properties is null || !_properties.ContainsKey(member))
                 {
                     // can try utilize fast path
-                    var accessor = _engine.Options.Interop.TypeResolver.GetAccessor(_engine, Target.GetType(), member, forWrite: true);
+                    var accessor = _engine.Options.Interop.TypeResolver.GetAccessor(_engine, ClrType, member, forWrite: true);
 
                     if (ReferenceEquals(accessor, ConstantValueAccessor.NullAccessor))
                     {
@@ -160,7 +162,7 @@ namespace Jint.Runtime.Interop
             else if (includeStrings)
             {
                 // we take public properties and fields
-                var type = Target.GetType();
+                var type = ClrType;
                 foreach (var p in type.GetProperties(BindingFlags.Static | BindingFlags.Instance | BindingFlags.Public))
                 {
                     var indexParameters = p.GetIndexParameters();
@@ -232,7 +234,7 @@ namespace Jint.Runtime.Interop
                 return new PropertyDescriptor(result, PropertyFlag.OnlyEnumerable);
             }
 
-            var accessor = _engine.Options.Interop.TypeResolver.GetAccessor(_engine, Target.GetType(), member);
+            var accessor = _engine.Options.Interop.TypeResolver.GetAccessor(_engine, ClrType, member);
             var descriptor = accessor.CreatePropertyDescriptor(_engine, Target, enumerable: !isDictionary);
             if (!isDictionary && !ReferenceEquals(descriptor, PropertyDescriptor.Undefined))
             {
@@ -251,7 +253,7 @@ namespace Jint.Runtime.Interop
                 return member switch
                 {
                     PropertyInfo pi => new PropertyAccessor(pi.Name, pi),
-                    MethodBase mb => new MethodAccessor(MethodDescriptor.Build(new[] {mb})),
+                    MethodBase mb => new MethodAccessor(target.GetType(), member.Name, MethodDescriptor.Build(new[] { mb })),
                     FieldInfo fi => new FieldAccessor(fi),
                     _ => null
                 };
@@ -259,18 +261,38 @@ namespace Jint.Runtime.Interop
             return engine.Options.Interop.TypeResolver.GetAccessor(engine, target.GetType(), member.Name, Factory).CreatePropertyDescriptor(engine, target);
         }
 
-        private static JsValue Iterator(JsValue thisObj, JsValue[] arguments)
+        internal static Type GetClrType(object obj, Type? type)
         {
-            var wrapper = (ObjectWrapper) thisObj;
+            if (type is null || type == typeof(object))
+            {
+                return obj.GetType();
+            }
+            else
+            {
+                var underlyingType = Nullable.GetUnderlyingType(type);
+                if (underlyingType is not null)
+                {
+                    return underlyingType;
+                }
+                else
+                {
+                    return type;
+                }
+            }
+        }
+
+        private static JsValue Iterator(JsValue thisObject, JsValue[] arguments)
+        {
+            var wrapper = (ObjectWrapper) thisObject;
 
             return wrapper._typeDescriptor.IsDictionary
                 ? new DictionaryIterator(wrapper._engine, wrapper)
                 : new EnumerableIterator(wrapper._engine, (IEnumerable) wrapper.Target);
         }
 
-        private static JsValue GetLength(JsValue thisObj, JsValue[] arguments)
+        private static JsValue GetLength(JsValue thisObject, JsValue[] arguments)
         {
-            var wrapper = (ObjectWrapper) thisObj;
+            var wrapper = (ObjectWrapper) thisObject;
             return JsNumber.Create((int) (wrapper._typeDescriptor.LengthProperty?.GetValue(wrapper.Target) ?? 0));
         }
 
@@ -296,12 +318,15 @@ namespace Jint.Runtime.Interop
                 return true;
             }
 
-            return Equals(Target, other.Target);
+            return Equals(Target, other.Target) && Equals(ClrType, other.ClrType);
         }
 
         public override int GetHashCode()
         {
-            return Target?.GetHashCode() ?? 0;
+            var hashCode = -1468639730;
+            hashCode = hashCode * -1521134295 + Target.GetHashCode();
+            hashCode = hashCode * -1521134295 + ClrType.GetHashCode();
+            return hashCode;
         }
 
         private sealed class DictionaryIterator : IteratorInstance
@@ -342,7 +367,7 @@ namespace Jint.Runtime.Interop
 
             public override void Close(CompletionType completion)
             {
-               (_enumerator as IDisposable)?.Dispose();
+                (_enumerator as IDisposable)?.Dispose();
                 base.Close(completion);
             }
 

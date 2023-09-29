@@ -14,7 +14,7 @@ using Xunit.Abstractions;
 
 namespace Jint.Tests.Runtime
 {
-    public class EngineTests : IDisposable
+    public partial class EngineTests : IDisposable
     {
         private readonly Engine _engine;
         private int countBreak = 0;
@@ -1882,6 +1882,31 @@ var prep = function (fn) { fn(); };
                     equal(Date.parse(d.toLocaleString()), d.valueOf());
             ");
         }
+
+
+        [Fact]
+        public void ShouldThrowErrorWhenMaxExecutionStackCountLimitExceeded()
+        {
+            new Engine(options => options.Constraints.MaxExecutionStackCount = 1000)
+                            .SetValue("assert", new Action<bool>(Assert.True))
+                            .Evaluate(@"
+                    var count = 0;
+                    function recurse() {
+                        count++;
+                        recurse();
+                        return null; // ensure no tail recursion
+                    }
+                    try {
+                        count = 0; 
+                        recurse();
+                        assert(false);
+                    } catch(err) {
+                        assert(count >= 1000);
+                    }
+            ");
+
+        }
+
 
         [Fact]
         public void LocaleNumberShouldUseLocalCulture()

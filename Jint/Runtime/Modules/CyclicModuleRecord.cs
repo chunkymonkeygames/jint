@@ -29,7 +29,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
     protected bool _hasTLA;
     private bool _asyncEvaluation;
     private PromiseCapability _topLevelCapability;
-    private List<CyclicModuleRecord> _asyncParentModules;
+    private readonly List<CyclicModuleRecord> _asyncParentModules;
     private int _asyncEvalOrder;
     private int _pendingAsyncDependencies;
 
@@ -124,7 +124,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
         module._topLevelCapability = capability;
 
         var result = module.InnerModuleEvaluation(stack, 0, ref asyncEvalOrder);
-        
+
         if (result.Type != CompletionType.Normal)
         {
             foreach (var m in stack)
@@ -389,7 +389,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
                     requiredModule.Status = ModuleStatus.EvaluatingAsync;
                 }
 
-                done = requiredModule == this;
+                done = ReferenceEquals(requiredModule, this);
                 requiredModule._cycleRoot = this;
             }
         }
@@ -426,7 +426,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
         var onFullfilled = new ClrFunctionInstance(_engine, "fulfilled", AsyncModuleExecutionFulfilled, 1, PropertyFlag.Configurable);
         var onRejected = new ClrFunctionInstance(_engine, "rejected", AsyncModuleExecutionRejected, 1, PropertyFlag.Configurable);
 
-        PromiseOperations.PerformPromiseThen(_engine, (PromiseInstance) capability.PromiseInstance, onFullfilled, onRejected, null);
+        PromiseOperations.PerformPromiseThen(_engine, (JsPromise) capability.PromiseInstance, onFullfilled, onRejected, null);
 
         return ExecuteModule(capability);
     }
@@ -435,7 +435,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
     /// <summary>
     /// https://tc39.es/ecma262/#sec-async-module-execution-fulfilled
     /// </summary>
-    private JsValue AsyncModuleExecutionFulfilled(JsValue thisObj, JsValue[] arguments)
+    private JsValue AsyncModuleExecutionFulfilled(JsValue thisObject, JsValue[] arguments)
     {
         var module = (CyclicModuleRecord) arguments.At(0);
         if (module.Status == ModuleStatus.Evaluated)
@@ -509,7 +509,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
     /// <summary>
     /// https://tc39.es/ecma262/#sec-async-module-execution-rejected
     /// </summary>
-    private static JsValue AsyncModuleExecutionRejected(JsValue thisObj, JsValue[] arguments)
+    private static JsValue AsyncModuleExecutionRejected(JsValue thisObject, JsValue[] arguments)
     {
         var module = (SourceTextModuleRecord) arguments.At(0);
         var error = arguments.At(1);
@@ -538,7 +538,7 @@ public abstract class CyclicModuleRecord : ModuleRecord
         for (var i = 0; i < asyncParentModules.Count; i++)
         {
             var m = asyncParentModules[i];
-            AsyncModuleExecutionRejected(thisObj, new[] { m, error });
+            AsyncModuleExecutionRejected(thisObject, new[] { m, error });
         }
 
         if (module._topLevelCapability is not null)

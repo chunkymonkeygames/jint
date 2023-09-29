@@ -41,7 +41,7 @@ namespace Jint.Native.TypedArray
             SetProperties(properties);
         }
 
-        public override ObjectInstance Construct(JsValue[] args, JsValue newTarget)
+        public override ObjectInstance Construct(JsValue[] arguments, JsValue newTarget)
         {
             if (newTarget.IsUndefined())
             {
@@ -64,24 +64,24 @@ namespace Jint.Native.TypedArray
                 _ => null!
             };
 
-            var numberOfArgs = args.Length;
+            var numberOfArgs = arguments.Length;
             if (numberOfArgs == 0)
             {
                 return AllocateTypedArray(newTarget, proto, 0);
             }
 
-            var firstArgument = args[0];
+            var firstArgument = arguments[0];
             if (firstArgument.IsObject())
             {
                 var o = AllocateTypedArray(newTarget, proto);
-                if (firstArgument is TypedArrayInstance typedArrayInstance)
+                if (firstArgument is JsTypedArray typedArrayInstance)
                 {
                     InitializeTypedArrayFromTypedArray(o, typedArrayInstance);
                 }
-                else if (firstArgument is ArrayBufferInstance arrayBuffer)
+                else if (firstArgument is JsArrayBuffer arrayBuffer)
                 {
-                    var byteOffset = numberOfArgs > 1 ? args[1] : Undefined;
-                    var length = numberOfArgs > 2 ? args[2] : Undefined;
+                    var byteOffset = numberOfArgs > 1 ? arguments[1] : Undefined;
+                    var length = numberOfArgs > 2 ? arguments[2] : Undefined;
                     InitializeTypedArrayFromArrayBuffer(o, arrayBuffer, byteOffset, length);
                 }
                 else
@@ -123,7 +123,7 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#sec-initializetypedarrayfromtypedarray
         /// </summary>
-        private void InitializeTypedArrayFromTypedArray(TypedArrayInstance o, TypedArrayInstance srcArray)
+        private void InitializeTypedArrayFromTypedArray(JsTypedArray o, JsTypedArray srcArray)
         {
             var srcData = srcArray._viewedArrayBuffer;
             srcData.AssertNotDetached();
@@ -137,7 +137,7 @@ namespace Jint.Native.TypedArray
             var byteLength = elementSize * elementLength;
 
             var arrayBuffer = _realm.Intrinsics.ArrayBuffer;
-            ArrayBufferInstance data;
+            JsArrayBuffer data;
             if (elementType == srcType)
             {
                 data = srcData.CloneArrayBuffer(arrayBuffer, srcByteOffset, byteLength);
@@ -174,8 +174,8 @@ namespace Jint.Native.TypedArray
         /// https://tc39.es/ecma262/#sec-initializetypedarrayfromarraybuffer
         /// </summary>
         private void InitializeTypedArrayFromArrayBuffer(
-            TypedArrayInstance o,
-            ArrayBufferInstance buffer,
+            JsTypedArray o,
+            JsArrayBuffer buffer,
             JsValue byteOffset,
             JsValue length)
         {
@@ -224,7 +224,7 @@ namespace Jint.Native.TypedArray
             o._byteOffset = offset;
         }
 
-        private static void InitializeTypedArrayFromList(TypedArrayInstance o, List<JsValue> values)
+        private static void InitializeTypedArrayFromList(JsTypedArray o, List<JsValue> values)
         {
             var len = values.Count;
             o.AllocateTypedArrayBuffer((uint) len);
@@ -237,7 +237,7 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#sec-initializetypedarrayfromarraylike
         /// </summary>
-        private static void InitializeTypedArrayFromArrayLike(TypedArrayInstance o, ObjectInstance arrayLike)
+        private static void InitializeTypedArrayFromArrayLike(JsTypedArray o, ObjectInstance arrayLike)
         {
             var operations = ArrayOperations.For(arrayLike);
             var len = operations.GetLongLength();
@@ -251,11 +251,11 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#sec-allocatetypedarray
         /// </summary>
-        private TypedArrayInstance AllocateTypedArray(JsValue newTarget, Func<Intrinsics, ObjectInstance> defaultProto, uint length = 0)
+        private JsTypedArray AllocateTypedArray(JsValue newTarget, Func<Intrinsics, ObjectInstance> defaultProto, uint length = 0)
         {
             var proto = GetPrototypeFromConstructor(newTarget, defaultProto);
             var realm = GetFunctionRealm(newTarget);
-            var obj = new TypedArrayInstance(_engine, realm.Intrinsics, _arrayElementType, length)
+            var obj = new JsTypedArray(_engine, realm.Intrinsics, _arrayElementType, length)
             {
                 _prototype = proto
             };
@@ -267,7 +267,7 @@ namespace Jint.Native.TypedArray
             return obj;
         }
 
-        internal static void FillTypedArrayInstance<T>(TypedArrayInstance target, T[] values)
+        internal static void FillTypedArrayInstance<T>(JsTypedArray target, T[] values)
         {
             for (var i = 0; i < values.Length; ++i)
             {
@@ -275,7 +275,7 @@ namespace Jint.Native.TypedArray
             }
         }
 
-        internal static void FillTypedArrayInstance(TypedArrayInstance target, ulong[] values)
+        internal static void FillTypedArrayInstance(JsTypedArray target, ulong[] values)
         {
             for (var i = 0; i < values.Length; ++i)
             {
@@ -283,7 +283,7 @@ namespace Jint.Native.TypedArray
             }
         }
 
-        internal static void FillTypedArrayInstance(TypedArrayInstance target, long[] values)
+        internal static void FillTypedArrayInstance(JsTypedArray target, long[] values)
         {
             for (var i = 0; i < values.Length; ++i)
             {

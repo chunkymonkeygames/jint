@@ -131,12 +131,13 @@ namespace Jint.Runtime.Interop
                         }
 
                         // optional parameters
-                        if (parameters.Length >= arguments.Length)
+                        if (parameters.Length > arguments.Length)
                         {
                             // all missing ones must be optional
-                            foreach (var parameter in parameters.AsSpan(parameters.Length - arguments.Length + 1))
+                            int start = parameters.Length - arguments.Length;
+                            for (var i = start; i < parameters.Length; i++)
                             {
-                                if (!parameter.IsOptional)
+                                if (!parameters[i].IsOptional)
                                 {
                                     // use original arguments
                                     return arguments;
@@ -344,6 +345,11 @@ namespace Jint.Runtime.Interop
             };
 
             return derivedType != null && baseType != null && (derivedType == baseType || derivedType.IsSubclassOf(baseType));
+        }
+
+        public override string ToString()
+        {
+            return "[CLR type: " + ReferenceType + "]";
         }
     }
 }

@@ -42,7 +42,7 @@ namespace Jint.Native.RegExp
         {
             const PropertyFlag lengthFlags = PropertyFlag.Configurable;
 
-            GetSetPropertyDescriptor CreateGetAccessorDescriptor(string name, Func<RegExpInstance, JsValue> valueExtractor, JsValue? protoValue = null)
+            GetSetPropertyDescriptor CreateGetAccessorDescriptor(string name, Func<JsRegExp, JsValue> valueExtractor, JsValue? protoValue = null)
             {
                 return new GetSetPropertyDescriptor(
                     get: new ClrFunctionInstance(Engine, name, (thisObj, arguments) =>
@@ -52,7 +52,7 @@ namespace Jint.Native.RegExp
                             return protoValue ?? Undefined;
                         }
 
-                        var r = thisObj as RegExpInstance;
+                        var r = thisObj as JsRegExp;
                         if (r is null)
                         {
                             ExceptionHelper.ThrowTypeError(_realm);
@@ -98,14 +98,14 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-get-regexp.prototype.source
         /// </summary>
-        private JsValue Source(JsValue thisObj, JsValue[] arguments)
+        private JsValue Source(JsValue thisObject, JsValue[] arguments)
         {
-            if (ReferenceEquals(thisObj, this))
+            if (ReferenceEquals(thisObject, this))
             {
                 return DefaultSource;
             }
 
-            var r = thisObj as RegExpInstance;
+            var r = thisObject as JsRegExp;
             if (r is null)
             {
                 ExceptionHelper.ThrowTypeError(_realm);
@@ -113,7 +113,7 @@ namespace Jint.Native.RegExp
 
             if (string.IsNullOrEmpty(r.Source))
             {
-                return RegExpInstance.regExpForMatchingAllCharacters;
+                return JsRegExp.regExpForMatchingAllCharacters;
             }
 
 
@@ -126,9 +126,9 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-regexp.prototype-@@replace
         /// </summary>
-        private JsValue Replace(JsValue thisObj, JsValue[] arguments)
+        private JsValue Replace(JsValue thisObject, JsValue[] arguments)
         {
-            var rx = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.replace");
+            var rx = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.replace");
             var s = TypeConverter.ToString(arguments.At(0));
             var lengthS = s.Length;
             var replaceValue = arguments.At(1);
@@ -151,14 +151,14 @@ namespace Jint.Native.RegExp
             if (global)
             {
                 fullUnicode = flags.IndexOf('u') != -1;
-                rx.Set(RegExpInstance.PropertyLastIndex, 0, true);
+                rx.Set(JsRegExp.PropertyLastIndex, 0, true);
             }
 
             // check if we can access fast path
             if (!fullUnicode
                 && !mayHaveNamedCaptures
                 && !TypeConverter.ToBoolean(rx.Get(PropertySticky))
-                && rx is RegExpInstance rei && rei.TryGetDefaultRegExpExec(out _))
+                && rx is JsRegExp rei && rei.TryGetDefaultRegExpExec(out _))
             {
                 var count = global ? int.MaxValue : 1;
 
@@ -167,16 +167,17 @@ namespace Jint.Native.RegExp
                 {
                     string Evaluator(Match match)
                     {
-                        var replacerArgs = new List<JsValue>(match.Groups.Count + 2);
+                        var actualGroupCount = GetActualRegexGroupCount(rei, match);
+                        var replacerArgs = new List<JsValue>(actualGroupCount + 2);
                         replacerArgs.Add(match.Value);
 
                         ObjectInstance? groups = null;
-                        for (var i = 1; i < match.Groups.Count; i++)
+                        for (var i = 1; i < actualGroupCount; i++)
                         {
                             var capture = match.Groups[i];
                             replacerArgs.Add(capture.Success ? capture.Value : Undefined);
 
-                            var groupName = GetRegexGroupName(rei.Value, i);
+                            var groupName = GetRegexGroupName(rei, i);
                             if (!string.IsNullOrWhiteSpace(groupName))
                             {
                                 groups ??= OrdinaryObjectCreate(_engine, null);
@@ -201,7 +202,7 @@ namespace Jint.Native.RegExp
                     result = rei.Value.Replace(s, TypeConverter.ToString(replaceValue), count);
                 }
 
-                rx.Set(RegExpInstance.PropertyLastIndex, JsNumber.PositiveZero);
+                rx.Set(JsRegExp.PropertyLastIndex, JsNumber.PositiveZero);
                 return result;
             }
 
@@ -224,9 +225,9 @@ namespace Jint.Native.RegExp
                 var matchStr = TypeConverter.ToString(result.Get(0));
                 if (matchStr == "")
                 {
-                    var thisIndex = TypeConverter.ToLength(rx.Get(RegExpInstance.PropertyLastIndex));
+                    var thisIndex = TypeConverter.ToLength(rx.Get(JsRegExp.PropertyLastIndex));
                     var nextIndex = AdvanceStringIndex(s, thisIndex, fullUnicode);
-                    rx.Set(RegExpInstance.PropertyLastIndex, nextIndex);
+                    rx.Set(JsRegExp.PropertyLastIndex, nextIndex);
                 }
             }
 
@@ -428,9 +429,9 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-regexp.prototype-@@split
         /// </summary>
-        private JsValue Split(JsValue thisObj, JsValue[] arguments)
+        private JsValue Split(JsValue thisObject, JsValue[] arguments)
         {
-            var rx = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.split");
+            var rx = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.split");
             var s = TypeConverter.ToString(arguments.At(0));
             var limit = arguments.At(1);
             var c = SpeciesConstructor(rx, _realm.Intrinsics.RegExp);
@@ -463,32 +464,24 @@ namespace Jint.Native.RegExp
                 return a;
             }
 
-            if (!unicodeMatching && rx is RegExpInstance R && R.TryGetDefaultRegExpExec(out _))
+            if (!unicodeMatching && rx is JsRegExp R && R.TryGetDefaultRegExpExec(out _))
             {
                 // we can take faster path
 
-                if (R.Source == RegExpInstance.regExpForMatchingAllCharacters)
+                if (R.Source == JsRegExp.regExpForMatchingAllCharacters)
                 {
                     // if empty string, just a string split
                     return StringPrototype.SplitWithStringSeparator(_realm, "", s, (uint) s.Length);
                 }
 
                 var a = _realm.Intrinsics.Array.Construct(Arguments.Empty);
-                var match = R.Value.Match(s, 0);
-
-                if (!match.Success) // No match at all return the string in an array
-                {
-                    a.SetIndexValue(0, s, updateLength: true);
-                    return a;
-                }
 
                 int lastIndex = 0;
                 uint index = 0;
-                while (match.Success && index < lim)
+                for (var match = R.Value.Match(s, 0); match.Success; match = match.NextMatch())
                 {
                     if (match.Length == 0 && (match.Index == 0 || match.Index == s.Length || match.Index == lastIndex))
                     {
-                        match = match.NextMatch();
                         continue;
                     }
 
@@ -501,7 +494,8 @@ namespace Jint.Native.RegExp
                     }
 
                     lastIndex = match.Index + match.Length;
-                    for (int i = 1; i < match.Groups.Count; i++)
+                    var actualGroupCount = GetActualRegexGroupCount(R, match);
+                    for (int i = 1; i < actualGroupCount; i++)
                     {
                         var group = match.Groups[i];
                         var item = Undefined;
@@ -517,13 +511,10 @@ namespace Jint.Native.RegExp
                             return a;
                         }
                     }
-
-                    match = match.NextMatch();
-                    if (!match.Success) // Add the last part of the split
-                    {
-                        a.SetIndexValue(index++, s.Substring(lastIndex), updateLength: true);
-                    }
                 }
+
+                // Add the last part of the split
+                a.SetIndexValue(index, s.Substring(lastIndex), updateLength: true);
 
                 return a;
             }
@@ -538,7 +529,7 @@ namespace Jint.Native.RegExp
             ulong currentIndex = 0;
             while (currentIndex < (ulong) s.Length)
             {
-                splitter.Set(RegExpInstance.PropertyLastIndex, currentIndex, true);
+                splitter.Set(JsRegExp.PropertyLastIndex, currentIndex, true);
                 var z = RegExpExec(splitter, s);
                 if (z.IsNull())
                 {
@@ -546,7 +537,7 @@ namespace Jint.Native.RegExp
                     continue;
                 }
 
-                var endIndex = TypeConverter.ToLength(splitter.Get(RegExpInstance.PropertyLastIndex));
+                var endIndex = TypeConverter.ToLength(splitter.Get(JsRegExp.PropertyLastIndex));
                 endIndex = System.Math.Min(endIndex, (ulong) s.Length);
                 if (endIndex == previousStringIndex)
                 {
@@ -585,9 +576,9 @@ namespace Jint.Native.RegExp
             return a;
         }
 
-        private JsValue Flags(JsValue thisObj, JsValue[] arguments)
+        private JsValue Flags(JsValue thisObject, JsValue[] arguments)
         {
-            var r = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.flags");
+            var r = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.flags");
 
             static string AddFlagIfPresent(JsValue o, JsValue p, char flag, string s)
             {
@@ -606,9 +597,9 @@ namespace Jint.Native.RegExp
             return result;
         }
 
-        private JsValue ToRegExpString(JsValue thisObj, JsValue[] arguments)
+        private JsValue ToRegExpString(JsValue thisObject, JsValue[] arguments)
         {
-            var r = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.toString");
+            var r = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.toString");
 
             var pattern = TypeConverter.ToString(r.Get(PropertySource));
             var flags = TypeConverter.ToString(r.Get(PropertyFlags));
@@ -616,21 +607,21 @@ namespace Jint.Native.RegExp
             return "/" + pattern + "/" + flags;
         }
 
-        private JsValue Test(JsValue thisObj, JsValue[] arguments)
+        private JsValue Test(JsValue thisObject, JsValue[] arguments)
         {
-            var r = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.test");
+            var r = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.test");
             var s = TypeConverter.ToString(arguments.At(0));
 
             // check couple fast paths
-            if (r is RegExpInstance R && !R.FullUnicode)
+            if (r is JsRegExp R && !R.FullUnicode)
             {
                 if (!R.Sticky && !R.Global)
                 {
-                    R.Set(RegExpInstance.PropertyLastIndex, 0, throwOnError: true);
+                    R.Set(JsRegExp.PropertyLastIndex, 0, throwOnError: true);
                     return R.Value.IsMatch(s);
                 }
 
-                var lastIndex = (int) TypeConverter.ToLength(R.Get(RegExpInstance.PropertyLastIndex));
+                var lastIndex = (int) TypeConverter.ToLength(R.Get(JsRegExp.PropertyLastIndex));
                 if (lastIndex >= s.Length && s.Length > 0)
                 {
                     return JsBoolean.False;
@@ -639,10 +630,10 @@ namespace Jint.Native.RegExp
                 var m = R.Value.Match(s, lastIndex);
                 if (!m.Success || (R.Sticky && m.Index != lastIndex))
                 {
-                    R.Set(RegExpInstance.PropertyLastIndex, 0, throwOnError: true);
+                    R.Set(JsRegExp.PropertyLastIndex, 0, throwOnError: true);
                     return JsBoolean.False;
                 }
-                R.Set(RegExpInstance.PropertyLastIndex, m.Index + m.Length, throwOnError: true);
+                R.Set(JsRegExp.PropertyLastIndex, m.Index + m.Length, throwOnError: true);
                 return JsBoolean.True;
             }
 
@@ -653,22 +644,22 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-regexp.prototype-@@search
         /// </summary>
-        private JsValue Search(JsValue thisObj, JsValue[] arguments)
+        private JsValue Search(JsValue thisObject, JsValue[] arguments)
         {
-            var rx = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.search");
+            var rx = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.search");
 
             var s = TypeConverter.ToString(arguments.At(0));
-            var previousLastIndex = rx.Get(RegExpInstance.PropertyLastIndex);
+            var previousLastIndex = rx.Get(JsRegExp.PropertyLastIndex);
             if (!SameValue(previousLastIndex, 0))
             {
-                rx.Set(RegExpInstance.PropertyLastIndex, 0, true);
+                rx.Set(JsRegExp.PropertyLastIndex, 0, true);
             }
 
             var result = RegExpExec(rx, s);
-            var currentLastIndex = rx.Get(RegExpInstance.PropertyLastIndex);
+            var currentLastIndex = rx.Get(JsRegExp.PropertyLastIndex);
             if (!SameValue(currentLastIndex, previousLastIndex))
             {
-                rx.Set(RegExpInstance.PropertyLastIndex, previousLastIndex, true);
+                rx.Set(JsRegExp.PropertyLastIndex, previousLastIndex, true);
             }
 
             if (result.IsNull())
@@ -682,9 +673,9 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-regexp.prototype-@@match
         /// </summary>
-        private JsValue Match(JsValue thisObj, JsValue[] arguments)
+        private JsValue Match(JsValue thisObject, JsValue[] arguments)
         {
-            var rx = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.match");
+            var rx = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.match");
 
             var s = TypeConverter.ToString(arguments.At(0));
             var flags = TypeConverter.ToString(rx.Get(PropertyFlags));
@@ -695,10 +686,10 @@ namespace Jint.Native.RegExp
             }
 
             var fullUnicode = flags.IndexOf('u') != -1;
-            rx.Set(RegExpInstance.PropertyLastIndex, JsNumber.PositiveZero, true);
+            rx.Set(JsRegExp.PropertyLastIndex, JsNumber.PositiveZero, true);
 
             if (!fullUnicode
-                && rx is RegExpInstance rei
+                && rx is JsRegExp rei
                 && rei.TryGetDefaultRegExpExec(out _))
             {
                 // fast path
@@ -719,7 +710,7 @@ namespace Jint.Native.RegExp
                         match = match.NextMatch();
                         if (!match.Success || match.Index != ++li)
                             break;
-                        a.SetIndexValue(li,  match.Value, updateLength: false);
+                        a.SetIndexValue(li, match.Value, updateLength: false);
                     }
                     a.SetLength(li);
                     return a;
@@ -762,9 +753,9 @@ namespace Jint.Native.RegExp
                 a.SetIndexValue(n, matchStr, updateLength: false);
                 if (matchStr == "")
                 {
-                    var thisIndex = TypeConverter.ToLength(rx.Get(RegExpInstance.PropertyLastIndex));
+                    var thisIndex = TypeConverter.ToLength(rx.Get(JsRegExp.PropertyLastIndex));
                     var nextIndex = AdvanceStringIndex(s, thisIndex, fullUnicode);
-                    rx.Set(RegExpInstance.PropertyLastIndex, nextIndex, true);
+                    rx.Set(JsRegExp.PropertyLastIndex, nextIndex, true);
                 }
 
                 n++;
@@ -774,9 +765,9 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-regexp-prototype-matchall
         /// </summary>
-        private JsValue MatchAll(JsValue thisObj, JsValue[] arguments)
+        private JsValue MatchAll(JsValue thisObject, JsValue[] arguments)
         {
-            var r = AssertThisIsObjectInstance(thisObj, "RegExp.prototype.matchAll");
+            var r = AssertThisIsObjectInstance(thisObject, "RegExp.prototype.matchAll");
 
             var s = TypeConverter.ToString(arguments.At(0));
             var c = SpeciesConstructor(r, _realm.Intrinsics.RegExp);
@@ -788,8 +779,8 @@ namespace Jint.Native.RegExp
                 flags
             });
 
-            var lastIndex = TypeConverter.ToLength(r.Get(RegExpInstance.PropertyLastIndex));
-            matcher.Set(RegExpInstance.PropertyLastIndex, lastIndex, true);
+            var lastIndex = TypeConverter.ToLength(r.Get(JsRegExp.PropertyLastIndex));
+            matcher.Set(JsRegExp.PropertyLastIndex, lastIndex, true);
 
             var global = flags.IndexOf('g') != -1;
             var fullUnicode = flags.IndexOf('u') != -1;
@@ -824,7 +815,7 @@ namespace Jint.Native.RegExp
             var exec = r.Get(PropertyExec);
             if (exec is ICallable callable)
             {
-                var result = callable.Call(r, new JsValue[]  { s });
+                var result = callable.Call(r, new JsValue[] { s });
                 if (!result.IsNull() && !result.IsObject())
                 {
                     ExceptionHelper.ThrowTypeError(r.Engine.Realm);
@@ -833,7 +824,7 @@ namespace Jint.Native.RegExp
                 return result;
             }
 
-            var ri = r as RegExpInstance;
+            var ri = r as JsRegExp;
             if (ri is null)
             {
                 ExceptionHelper.ThrowTypeError(r.Engine.Realm);
@@ -857,10 +848,10 @@ namespace Jint.Native.RegExp
         /// <summary>
         /// https://tc39.es/ecma262/#sec-regexpbuiltinexec
         /// </summary>
-        private static JsValue RegExpBuiltinExec(RegExpInstance R, string s)
+        private static JsValue RegExpBuiltinExec(JsRegExp R, string s)
         {
             var length = (ulong) s.Length;
-            var lastIndex = TypeConverter.ToLength(R.Get(RegExpInstance.PropertyLastIndex));
+            var lastIndex = TypeConverter.ToLength(R.Get(JsRegExp.PropertyLastIndex));
 
             var global = R.Global;
             var sticky = R.Sticky;
@@ -869,7 +860,7 @@ namespace Jint.Native.RegExp
                 lastIndex = 0;
             }
 
-            if (R.Source == RegExpInstance.regExpForMatchingAllCharacters)  // Reg Exp is really ""
+            if (R.Source == JsRegExp.regExpForMatchingAllCharacters)  // Reg Exp is really ""
             {
                 if (lastIndex > (ulong) s.Length)
                 {
@@ -897,89 +888,77 @@ namespace Jint.Native.RegExp
                     return Null;
                 }
 
-                return CreateReturnValueArray(R.Engine, matcher, m, s, fullUnicode: false, hasIndices: false);
+                return CreateReturnValueArray(R, m, s, fullUnicode: false, hasIndices: false);
             }
 
             // the stateful version
             Match match;
+
+            if (lastIndex > length)
+            {
+                R.Set(JsRegExp.PropertyLastIndex, JsNumber.PositiveZero, true);
+                return Null;
+            }
+
+            var startAt = (int) lastIndex;
             while (true)
             {
-                if (lastIndex > length)
-                {
-                    R.Set(RegExpInstance.PropertyLastIndex, JsNumber.PositiveZero, true);
-                    return Null;
-                }
+                match = R.Value.Match(s, startAt);
 
-                match = R.Value.Match(s, (int) lastIndex);
-                var success = match.Success && (!sticky || match.Index == (int) lastIndex);
-                if (!success)
+                // The conversion of Unicode regex patterns to .NET Regex has some flaws:
+                // when the pattern may match empty strings, the adapted Regex will return empty string matches
+                // in the middle of surrogate pairs. As a best effort solution, we remove these fake positive matches.
+                // (See also: https://github.com/sebastienros/esprima-dotnet/pull/364#issuecomment-1606045259)
+
+                if (match.Success
+                    && fullUnicode
+                    && match.Length == 0
+                    && 0 < match.Index && match.Index < s.Length
+                    && char.IsHighSurrogate(s[match.Index - 1]) && char.IsLowSurrogate(s[match.Index]))
                 {
-                    R.Set(RegExpInstance.PropertyLastIndex, JsNumber.PositiveZero, true);
-                    return Null;
+                    startAt++;
+                    continue;
                 }
 
                 break;
             }
 
-            var e = match.Index + match.Length;
-            if (fullUnicode)
+            var success = match.Success && (!sticky || match.Index == (int) lastIndex);
+            if (!success)
             {
-                e = GetStringIndex(s, e);
+                R.Set(JsRegExp.PropertyLastIndex, JsNumber.PositiveZero, true);
+                return Null;
             }
+
+            var e = match.Index + match.Length;
+
+            // NOTE: Even in Unicode mode, we don't need to translate indices as .NET regexes always return code unit indices.
 
             if (global || sticky)
             {
-                R.Set(RegExpInstance.PropertyLastIndex, e, true);
+                R.Set(JsRegExp.PropertyLastIndex, e, true);
             }
 
-            return CreateReturnValueArray(R.Engine, matcher, match, s, fullUnicode, hasIndices);
-        }
-
-        /// <summary>
-        /// https://tc39.es/ecma262/#sec-getstringindex
-        /// </summary>
-        private static int GetStringIndex(string s, int codePointIndex)
-        {
-            if (s.Length == 0)
-            {
-                return 0;
-            }
-
-            var len = s.Length;
-            var codeUnitCount = 0;
-            var codePointCount = 0;
-
-            while (codeUnitCount < len)
-            {
-                if (codePointCount == codePointIndex)
-                {
-                    return codeUnitCount;
-                }
-
-                var isSurrogatePair = char.IsSurrogatePair(s, codeUnitCount);
-                codeUnitCount += isSurrogatePair ? 2 : 1;
-                codePointCount += 1;
-            }
-
-            return len;
+            return CreateReturnValueArray(R, match, s, fullUnicode, hasIndices);
         }
 
         private static JsArray CreateReturnValueArray(
-            Engine engine,
-            Regex regex,
+            JsRegExp rei,
             Match match,
             string s,
             bool fullUnicode,
             bool hasIndices)
         {
-            var array = engine.Realm.Intrinsics.Array.ArrayCreate((ulong) match.Groups.Count);
+            var engine = rei.Engine;
+            var actualGroupCount = GetActualRegexGroupCount(rei, match);
+            var array = engine.Realm.Intrinsics.Array.ArrayCreate((ulong) actualGroupCount);
             array.CreateDataProperty(PropertyIndex, match.Index);
             array.CreateDataProperty(PropertyInput, s);
 
             ObjectInstance? groups = null;
             List<string>? groupNames = null;
-            var indices = hasIndices ? new List<JsNumber[]?>(match.Groups.Count) : null;
-            for (uint i = 0; i < match.Groups.Count; i++)
+            var indices = hasIndices ? new List<JsNumber[]?>(actualGroupCount) : null;
+            for (uint i = 0; i < actualGroupCount; i++)
             {
                 var capture = match.Groups[(int) i];
                 var capturedValue = Undefined;
@@ -1000,7 +979,7 @@ namespace Jint.Native.RegExp
                     }
                 }
 
-                var groupName = GetRegexGroupName(regex, (int) i);
+                var groupName = GetRegexGroupName(rei, (int) i);
                 if (!string.IsNullOrWhiteSpace(groupName))
                 {
                     groups ??= OrdinaryObjectCreate(engine, null);
@@ -1067,25 +1046,36 @@ namespace Jint.Native.RegExp
             return engine.Realm.Intrinsics.Array.CreateArrayFromList(match);
         }
 
-        private static string? GetRegexGroupName(Regex regex, int index)
+        private static int GetActualRegexGroupCount(JsRegExp rei, Match match)
+        {
+            return rei.ParseResult.Success ? rei.ParseResult.ActualRegexGroupCount : match.Groups.Count;
+        }
+
+        private static string? GetRegexGroupName(JsRegExp rei, int index)
         {
             if (index == 0)
             {
                 return null;
             }
+            var regex = rei.Value;
+            if (rei.ParseResult.Success)
+            {
+                return rei.ParseResult.GetRegexGroupName(index);
+            }
+
             var groupNameFromNumber = regex.GroupNameFromNumber(index);
             if (groupNameFromNumber.Length == 1 && groupNameFromNumber[0] == 48 + index)
             {
                 // regex defaults to index as group name when it's not a named group
                 return null;
-
             }
+
             return groupNameFromNumber;
         }
 
-        private JsValue Exec(JsValue thisObj, JsValue[] arguments)
+        private JsValue Exec(JsValue thisObject, JsValue[] arguments)
         {
-            var r = thisObj as RegExpInstance;
+            var r = thisObject as JsRegExp;
             if (r is null)
             {
                 ExceptionHelper.ThrowTypeError(_engine.Realm);

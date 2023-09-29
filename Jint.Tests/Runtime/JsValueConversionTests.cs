@@ -5,7 +5,7 @@ namespace Jint.Tests.Runtime
 {
     public class JsValueConversionTests
     {
-        private Engine _engine;
+        private readonly Engine _engine;
 
         public JsValueConversionTests()
         {
@@ -119,7 +119,7 @@ namespace Jint.Tests.Runtime
         [Fact]
         public void ShouldBeARegExp()
         {
-            var value = new RegExpInstance(_engine);
+            var value = new JsRegExp(_engine);
             Assert.Equal(false, value.IsBoolean());
             Assert.Equal(false, value.IsArray());
             Assert.Equal(false, value.IsDate());

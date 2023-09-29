@@ -46,9 +46,9 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#sec-%typedarray%.from
         /// </summary>
-        private JsValue From(JsValue thisObj, JsValue[] arguments)
+        private JsValue From(JsValue thisObject, JsValue[] arguments)
         {
-            var c = thisObj;
+            var c = thisObject;
             if (!c.IsConstructor)
             {
                 ExceptionHelper.ThrowTypeError(_realm);
@@ -122,16 +122,16 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#sec-%typedarray%.of
         /// </summary>
-        private JsValue Of(JsValue thisObj, JsValue[] items)
+        private JsValue Of(JsValue thisObject, JsValue[] items)
         {
             var len = items.Length;
 
-            if (!thisObj.IsConstructor)
+            if (!thisObject.IsConstructor)
             {
                 ExceptionHelper.ThrowTypeError(_realm);
             }
 
-            var newObj = TypedArrayCreate(_realm, (IConstructor) thisObj, new JsValue[] { len });
+            var newObj = TypedArrayCreate(_realm, (IConstructor) thisObject, new JsValue[] { len });
 
             var k = 0;
             while (k < len)
@@ -147,7 +147,7 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#typedarray-species-create
         /// </summary>
-        internal TypedArrayInstance TypedArraySpeciesCreate(TypedArrayInstance exemplar, JsValue[] argumentList)
+        internal JsTypedArray TypedArraySpeciesCreate(JsTypedArray exemplar, JsValue[] argumentList)
         {
             var defaultConstructor = exemplar._arrayElementType.GetConstructor(_realm.Intrinsics)!;
             var constructor = SpeciesConstructor(exemplar, defaultConstructor);
@@ -163,7 +163,7 @@ namespace Jint.Native.TypedArray
         /// <summary>
         /// https://tc39.es/ecma262/#typedarray-create
         /// </summary>
-        internal static TypedArrayInstance TypedArrayCreate(Realm realm, IConstructor constructor, JsValue[] argumentList)
+        internal static JsTypedArray TypedArrayCreate(Realm realm, IConstructor constructor, JsValue[] argumentList)
         {
             var newTypedArray = Construct(constructor, argumentList).ValidateTypedArray(realm);
             if (argumentList.Length == 1 && argumentList[0] is JsNumber number)
@@ -188,7 +188,7 @@ namespace Jint.Native.TypedArray
             return Undefined;
         }
 
-        public override ObjectInstance Construct(JsValue[] args, JsValue newTarget)
+        public override ObjectInstance Construct(JsValue[] arguments, JsValue newTarget)
         {
             ExceptionHelper.ThrowTypeError(_realm, "Abstract class TypedArray not directly constructable");
             return null;

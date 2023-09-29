@@ -41,14 +41,14 @@ internal sealed class WeakRefPrototype : Prototype
         SetSymbols(symbols);
     }
 
-    private JsValue Deref(JsValue thisObj, JsValue[] arguments)
+    private JsValue Deref(JsValue thisObject, JsValue[] arguments)
     {
-        var weakRef = thisObj as WeakRefInstance;
-        if (weakRef is null)
+        if (thisObject is JsWeakRef weakRef)
         {
-            ExceptionHelper.ThrowTypeError(_realm, "object must be a WeakRef");
+            return weakRef.WeakRefDeref();
         }
 
-        return weakRef.WeakRefDeref();
+        ExceptionHelper.ThrowTypeError(_realm, "object must be a WeakRef");
+        return default;
     }
 }

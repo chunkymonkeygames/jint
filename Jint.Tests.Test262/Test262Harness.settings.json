@@ -1,23 +1,18 @@
 {
-  "SuiteGitSha": "9704d7f22f6342d6c4753ab9a8d62d6725de8c4e",
+  "SuiteGitSha": "9437cab774ab2f22c5cb971b11b8512eca705721",
   //"SuiteDirectory": "//mnt/c/work/test262",
   "TargetPath": "./Generated",
   "Namespace": "Jint.Tests.Test262",
   "Parallel": true,
   "ExcludedFeatures": [
     "Array.fromAsync",
+    "arraybuffer-transfer",
     "async-iteration",
     "Atomics",
-    "class-fields-private",
-    "class-fields-public",
-    "class-methods-private",
-    "class-static-block",
-    "class-static-fields-private",
-    "class-static-fields-public",
-    "class-static-methods-private",
     "decorators",
     "generators",
     "import-assertions",
+    "iterator-helpers",
     "regexp-duplicate-named-groups",
     "regexp-lookbehind",
     "regexp-unicode-property-escapes",
@@ -25,7 +20,6 @@
     "resizable-arraybuffer",
     "SharedArrayBuffer",
     "tail-call-optimization",
-    "top-level-await",
     "Temporal",
     "u180e"
   ],
@@ -36,59 +30,29 @@
     "intl402"
   ],
   "ExcludedFiles": [
-    // Esprima problem for regex, https://github.com/sebastienros/esprima-dotnet/pull/364
-    "built-ins/RegExp/S15.10.4.1_A9_T3.js",
 
     // Currently quite impossible to detect if assignment target is CoverParenthesizedExpression
     "language/expressions/assignment/fn-name-lhs-cover.js",
 
-    // Unicode support not built-in to .NET the same way, requires more work
-    "built-ins/RegExp/prototype/Symbol.match/builtin-infer-unicode.js",
-    "built-ins/RegExp/prototype/Symbol.search/u-lastindex-advance.js",
-    "built-ins/RegExp/prototype/exec/u-lastindex-adv.js",
-    "built-ins/RegExp/unicode_character_class_backspace_escape.js",
-    "built-ins/RegExp/unicode_restricted_identity_escape_alpha.js",
-    "built-ins/RegExp/unicode_restricted_identity_escape_c.js",
-    "built-ins/RegExp/unicode_restricted_identity_escape_u.js",
-    "built-ins/RegExp/unicode_restricted_identity_escape_x.js",
-    "language/literals/regexp/u-astral-char-class-invert.js",
-    "language/literals/regexp/u-astral.js",
-    "language/literals/regexp/u-case-mapping.js",
-
-    // cannot have characters like 𝒜 as group name or something starting with $ in .NET, other .NET limitations
-    "built-ins/RegExp/match-indices/indices-array-unicode-property-names.js",
-    "built-ins/RegExp/named-groups/non-unicode-match.js",
-    "built-ins/RegExp/named-groups/non-unicode-property-names-valid.js",
-    "built-ins/RegExp/named-groups/non-unicode-property-names.js",
-    "built-ins/RegExp/named-groups/unicode-match.js",
-    "built-ins/RegExp/named-groups/unicode-property-names-valid.js",
-    "built-ins/RegExp/named-groups/unicode-property-names.js",
-    "built-ins/RegExp/prototype/Symbol.replace/named-groups.js",
+    // RegExp conversion limitations
+    "built-ins/RegExp/S15.10.2.11_A1_T5.js",
+    "built-ins/RegExp/S15.10.2.11_A1_T7.js",
+    "built-ins/RegExp/S15.10.2.5_A1_T4.js",
+    "built-ins/RegExp/named-groups/non-unicode-references.js",
+    "built-ins/RegExp/named-groups/unicode-references.js",
     "built-ins/RegExp/quantifier-integer-limit.js",
+    "language/literals/regexp/named-groups/forward-reference.js",
 
-    // more validation and cleanup needed
-    "built-ins/RegExp/S15.10.2.13_A1_T1.js",
-    "built-ins/RegExp/S15.10.2.13_A1_T2.js",
-    "built-ins/RegExp/character-class-escape-non-whitespace.js",
-    "built-ins/RegExp/unicode_character_class_backspace_escape.js",
-    "built-ins/RegExp/unicode_identity_escape.js",
-    "built-ins/RegExp/unicode_restricted_character_class_escape.js",
-    "built-ins/RegExp/unicode_restricted_identity_escape.js",
-    "built-ins/RegExp/unicode_restricted_quantifiable_assertion.js",
-
+    // RegExp handling problems
+    "built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T6.js",
+    "language/literals/regexp/u-case-mapping.js",
 
     // requires investigation how to process complex function name evaluation for property
     "built-ins/Function/prototype/toString/method-computed-property-name.js",
+    "language/expressions/class/elements/class-name-static-initializer-anonymous.js",
 
     // http://www.ecma-international.org/ecma-262/#sec-block-level-function-declarations-web-legacy-compatibility-semantics not implemented (block level functions)
     "language/statements/let/block-local-closure-set-before-initialization.js",
-
-    // Logic difference in .NET RegExp / skipped in ECMA tests too
-    "built-ins/RegExp/S15.10.2.11_A1_T5.js",
-    "built-ins/RegExp/S15.10.2.11_A1_T7.js",
-    "built-ins/RegExp/S15.10.4.1_A8_T2.js",
-    "built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T6.js",
-    "built-ins/RegExp/S15.10.2.5_A1_T4.js",
 
     // Windows line ending differences
     "built-ins/String/raw/special-characters.js",
@@ -118,6 +82,8 @@
     "language/expressions/object/accessor-name-computed.js",
     "built-ins/TypedArrayConstructors/ctors/object-arg/as-generator-iterable-returns.js",
     "language/expressions/object/method-definition/name-prop-name-yield-id.js",
+    "language/statements/class/elements/*-generator-method-*.js",
+    "language/expressions/class/elements/*-generator-method-*.js",
 
     // generators not implemented
     "built-ins/Object/prototype/toString/proxy-function.js",
@@ -128,41 +94,20 @@
     "language/expressions/dynamic-import/assignment-expression/yield-expr.js",
     "language/statements/class/subclass/builtin-objects/GeneratorFunction/*.js",
     "language/**/*-yield-*.js",
+    "language/module-code/instn-local-bndng-gen.js",
+    "language/module-code/instn-local-bndng-export-gen.js",
 
-    // JavaScriptParser cannot handle direct 'super.property' script code
-    "language/expressions/super/prop-dot-cls-val-from-eval.js",
-    "language/expressions/super/prop-dot-obj-val-from-eval.js",
-    "language/expressions/super/prop-expr-cls-val-from-eval.js",
-    "language/expressions/super/prop-expr-obj-val-from-eval.js",
-
-    // Esprima problem
-
-    "language/literals/regexp/u-surrogate-pairs-atom-escape-decimal.js",
-    "language/literals/regexp/u-unicode-esc.js",
-    "language/statements/class/definition/methods-async-super-call-param.js",
-    "built-ins/AsyncFunction/AsyncFunction-construct.js\n",
-    "built-ins/String/prototype/split/separator-regexp.js",
-
-
-    "language/expressions/object/method-definition/async-super-call-param.js",
-    "language/expressions/object/method-definition/name-super-prop-param.js",
-    "language/expressions/optional-chaining/member-expression.js",
-    "language/expressions/tagged-template/invalid-escape-sequences.js",
-    "language/statements/for-of/dstr-obj-id-init-let.js",
-    "language/statements/for/head-lhs-let.js",
-    "language/expressions/object/yield-non-strict-access.js",
-    "language/expressions/object/yield-non-strict-syntax.js",
+     // Esprima problem
     "language/expressions/object/let-non-strict-access.js",
     "language/expressions/object/let-non-strict-syntax.js",
-    "language/expressions/assignment/dstr-obj-id-identifier-yield-ident-valid.js",
+    "language/expressions/object/yield-non-strict-access.js",
+    "language/expressions/object/yield-non-strict-syntax.js",
+    "language/expressions/tagged-template/invalid-escape-sequences.js",
     "language/statements/for-of/dstr-obj-id-identifier-yield-ident-valid.js",
-    "language/white-space/mongolian-vowel-separator-eval.js",
+    "language/statements/for/head-lhs-let.js",
 
     // SharedArrayBuffer not implemented
     "built-ins/SharedArrayBuffer/prototype/prop-desc.js",
-
-    // Esprima has parsing problems with weirdish unicode identifiers
-    "language/identifiers/*-unicode-*.js",
 
     // special casing data
     "built-ins/**/special_casing*.js",
@@ -371,32 +316,6 @@
     "language/literals/string/line-separator.js",
     "language/literals/string/paragraph-separator-eval.js",
     "language/literals/string/paragraph-separator.js",
-    "language/module-code/eval-self-once.js",
-    "language/module-code/export-expname-binding-index.js",
-    "language/module-code/instn-iee-bndng-cls.js",
-    "language/module-code/instn-iee-bndng-const.js",
-    "language/module-code/instn-iee-bndng-fun.js",
-    "language/module-code/instn-iee-bndng-let.js",
-    "language/module-code/instn-iee-bndng-var.js",
-    "language/module-code/instn-local-bndng-export-gen.js",
-    "language/module-code/instn-local-bndng-gen.js",
-    "language/module-code/instn-named-bndng-cls.js",
-    "language/module-code/instn-named-bndng-const.js",
-    "language/module-code/instn-named-bndng-dflt-cls.js",
-    "language/module-code/instn-named-bndng-dflt-expr.js",
-    "language/module-code/instn-named-bndng-dflt-fun-anon.js",
-    "language/module-code/instn-named-bndng-dflt-named.js",
-    "language/module-code/instn-named-bndng-dflt-star.js",
-    "language/module-code/instn-named-bndng-let.js",
-    "language/module-code/instn-named-bndng-trlng-comma.js",
-    "language/module-code/instn-named-bndng-var.js",
-    "language/module-code/namespace/internals/delete-exported-uninit.js",
-    "language/module-code/namespace/internals/enumerate-binding-uninit.js",
-    "language/module-code/namespace/internals/get-own-property-str-found-uninit.js",
-    "language/module-code/namespace/internals/get-str-found-uninit.js",
-    "language/module-code/namespace/internals/object-hasOwnProperty-binding-uninit.js",
-    "language/module-code/namespace/internals/object-keys-binding-uninit.js",
-    "language/module-code/namespace/internals/object-propertyIsEnumerable-binding-uninit.js",
     "language/statementList/eval-block-with-statment-block.js",
     "language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref-init-active.js",
     "language/statements/for-of/dstr/array-elem-put-obj-literal-prop-ref-init.js",

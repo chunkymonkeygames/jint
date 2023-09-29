@@ -5,11 +5,11 @@ using Jint.Runtime;
 
 namespace Jint.Native.WeakSet;
 
-internal sealed class WeakSetInstance : ObjectInstance
+internal sealed class JsWeakSet : ObjectInstance
 {
     private readonly ConditionalWeakTable<JsValue, JsValue> _table;
 
-    public WeakSetInstance(Engine engine) : base(engine)
+    public JsWeakSet(Engine engine) : base(engine)
     {
         _table = new ConditionalWeakTable<JsValue, JsValue>();
     }
@@ -31,7 +31,7 @@ internal sealed class WeakSetInstance : ObjectInstance
             ExceptionHelper.ThrowTypeError(_engine.Realm, "WeakSet value must be an object or symbol, got " + value);
         }
 
-#if NETSTANDARD2_1_OR_GREATER
+#if SUPPORTS_WEAK_TABLE_ADD_OR_UPDATE
         _table.AddOrUpdate(value, Undefined);
 #else
         _table.Remove(value);

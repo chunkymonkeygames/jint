@@ -26,15 +26,18 @@ namespace Jint
     /// </summary>
     public sealed partial class Engine : IDisposable
     {
-        private readonly JavaScriptParser _defaultParser = new(ParserOptions.Default);
+        private static readonly Options _defaultEngineOptions = new();
 
-        internal readonly ExecutionContextStack _executionContexts;
+        private readonly ParserOptions _defaultParserOptions;
+        private readonly JavaScriptParser _defaultParser;
+
+        private readonly ExecutionContextStack _executionContexts;
         private JsValue _completionValue = JsValue.Undefined;
         internal EvaluationContext? _activeEvaluationContext;
 
         private readonly EventLoop _eventLoop = new();
 
-        private readonly Agent _agent = new Agent();
+        private readonly Agent _agent = new();
 
         // lazy properties
         private DebugHandler? _debugHandler;
@@ -50,7 +53,7 @@ namespace Jint
         internal readonly JsValueArrayPool _jsValueArrayPool;
         internal readonly ExtensionMethodCache _extensionMethods;
 
-        public ITypeConverter ClrTypeConverter { get; internal set; } = null!;
+        public ITypeConverter ClrTypeConverter { get; internal set; }
 
         // cache of types used when resolving CLR type names
         internal readonly Dictionary<string, Type?> TypeCache = new();
@@ -59,6 +62,7 @@ namespace Jint
         internal ConditionalWeakTable<object, ObjectInstance>? _objectWrapperCache;
 
         internal readonly JintCallStack CallStack;
+        internal readonly StackGuard _stackGuard;
 
         // needed in initial engine setup, for example CLR function construction
         internal Intrinsics _originalIntrinsics = null!;
@@ -71,7 +75,7 @@ namespace Jint
         /// <summary>
         /// Constructs a new engine instance.
         /// </summary>
-        public Engine() : this((Action<Options>?) null)
+        public Engine() : this(null, null)
         {
         }
 
@@ -79,14 +83,14 @@ namespace Jint
         /// Constructs a new engine instance and allows customizing options.
         /// </summary>
         public Engine(Action<Options>? options)
-            : this((engine, opts) => options?.Invoke(opts))
+            : this(null, options != null ? (_, opts) => options.Invoke(opts) : null)
         {
         }
 
         /// <summary>
         /// Constructs a new engine with a custom <see cref="Options"/> instance.
         /// </summary>
-        public Engine(Options options) : this((e, o) => e.Options = options)
+        public Engine(Options options) : this(options, null)
         {
         }
 
@@ -94,14 +98,21 @@ namespace Jint
         /// Constructs a new engine instance and allows customizing options.
         /// </summary>
         /// <remarks>The provided engine instance in callback is not guaranteed to be fully configured</remarks>
-        public Engine(Action<Engine, Options> options)
+        public Engine(Action<Engine, Options> options) : this(null, options)
+        {
+        }
+
+        private Engine(Options? options, Action<Engine, Options>? configure)
         {
             Advanced = new AdvancedOperations(this);
+            ClrTypeConverter = new DefaultTypeConverter(this);
 
             _executionContexts = new ExecutionContextStack(2);
 
-            Options = new Options();
-            options?.Invoke(this, Options);
+            // we can use default options if there's no action to modify it
+            Options = options ?? (configure is not null ? new Options() : _defaultEngineOptions);
+
+            configure?.Invoke(this, Options);
 
             _extensionMethods = ExtensionMethodCache.Build(Options.Interop.ExtensionMethodTypes);
 
@@ -125,6 +136,15 @@ namespace Jint
             Options.Apply(this);
 
             CallStack = new JintCallStack(Options.Constraints.MaxRecursionDepth >= 0);
+            _stackGuard = new StackGuard(this);
+
+            _defaultParserOptions = ParserOptions.Default with
+            {
+                AllowReturnOutsideFunction = true,
+                RegexTimeout = Options.Constraints.RegexTimeout
+            };
+
+            _defaultParser = new JavaScriptParser(_defaultParserOptions);
         }
 
         private void Reset()
@@ -197,7 +217,7 @@ namespace Jint
         /// <summary>
         /// Registers a string value as variable.
         /// </summary>
-        public Engine SetValue(string name, string value)
+        public Engine SetValue(string name, string? value)
         {
             return SetValue(name, value is null ? JsValue.Null : JsString.Create(value));
         }
@@ -286,13 +306,13 @@ namespace Jint
         /// Evaluates code and returns last return value.
         /// </summary>
         public JsValue Evaluate(string code)
-            => Evaluate(code, "<anonymous>", ParserOptions.Default);
+            => Evaluate(code, "<anonymous>", _defaultParserOptions);
 
         /// <summary>
         /// Evaluates code and returns last return value.
         /// </summary>
         public JsValue Evaluate(string code, string source)
-            => Evaluate(code, source, ParserOptions.Default);
+            => Evaluate(code, source, _defaultParserOptions);
 
         /// <summary>
         /// Evaluates code and returns last return value.
@@ -305,7 +325,7 @@ namespace Jint
         /// </summary>
         public JsValue Evaluate(string code, string source, ParserOptions parserOptions)
         {
-            var parser = ReferenceEquals(ParserOptions.Default, parserOptions)
+            var parser = ReferenceEquals(_defaultParserOptions, parserOptions)
                 ? _defaultParser
                 : new JavaScriptParser(parserOptions);
 
@@ -324,7 +344,7 @@ namespace Jint
         /// Executes code into engine and returns the engine instance (useful for chaining).
         /// </summary>
         public Engine Execute(string code, string? source = null)
-            => Execute(code, source ?? "<anonymous>", ParserOptions.Default);
+            => Execute(code, source ?? "<anonymous>", _defaultParserOptions);
 
         /// <summary>
         /// Executes code into engine and returns the engine instance (useful for chaining).
@@ -337,7 +357,7 @@ namespace Jint
         /// </summary>
         public Engine Execute(string code, string source, ParserOptions parserOptions)
         {
-            var parser = ReferenceEquals(ParserOptions.Default, parserOptions)
+            var parser = ReferenceEquals(_defaultParserOptions, parserOptions)
                 ? _defaultParser
                 : new JavaScriptParser(parserOptions);
 
@@ -400,12 +420,12 @@ namespace Jint
                     throw ex;
                 }
 
+                _completionValue = result.GetValueOrDefault();
+
                 // TODO what about callstack and thrown exceptions?
                 RunAvailableContinuations();
 
-                _completionValue = result.GetValueOrDefault();
-
-                return this;
+               return this;
             }
             finally
             {
@@ -425,7 +445,7 @@ namespace Jint
         /// <returns>a Promise instance and functions to either resolve or reject it</returns>
         public ManualPromise RegisterPromise()
         {
-            var promise = new PromiseInstance(this)
+            var promise = new JsPromise(this)
             {
                 _prototype = Realm.Intrinsics.Promise.PrototypeObject
             };
@@ -455,7 +475,16 @@ namespace Jint
         internal void RunAvailableContinuations()
         {
             var queue = _eventLoop.Events;
+            if (queue.Count == 0)
+            {
+                return;
+            }
 
+            DoProcessEventLoop(queue);
+        }
+
+        private static void DoProcessEventLoop(Queue<Action> queue)
+        {
             while (true)
             {
                 if (queue.Count == 0)
@@ -506,7 +535,7 @@ namespace Jint
 
         internal JsValue GetValue(Reference reference, bool returnReferenceToPool)
         {
-            var baseValue = reference.GetBase();
+            var baseValue = reference.Base;
 
             if (baseValue.IsUndefined())
             {
@@ -524,9 +553,9 @@ namespace Jint
                 return baseValue;
             }
 
-            if (reference.IsPropertyReference())
+            if (reference.IsPropertyReference)
             {
-                var property = reference.GetReferencedName();
+                var property = reference.ReferencedName;
                 if (returnReferenceToPool)
                 {
                     _referencePool.Return(reference);
@@ -534,8 +563,14 @@ namespace Jint
 
                 if (baseValue.IsObject())
                 {
-                    var o = TypeConverter.ToObject(Realm, baseValue);
-                    var v = o.Get(property, reference.GetThisValue());
+                    var baseObj = TypeConverter.ToObject(Realm, baseValue);
+
+                    if (reference.IsPrivateReference)
+                    {
+                        return baseObj.PrivateGet((PrivateName) reference.ReferencedName);
+                    }
+
+                    var v = baseObj.Get(property, reference.ThisValue);
                     return v;
                 }
                 else
@@ -553,6 +588,11 @@ namespace Jint
                     if (o is null)
                     {
                         o = TypeConverter.ToObject(Realm, baseValue);
+                    }
+
+                    if (reference.IsPrivateReference)
+                    {
+                        return o.PrivateGet((PrivateName) reference.ReferencedName);
                     }
 
                     var desc = o.GetProperty(property);
@@ -583,7 +623,7 @@ namespace Jint
                 ExceptionHelper.ThrowArgumentException();
             }
 
-            var bindingValue = record.GetBindingValue(reference.GetReferencedName().ToString(), reference.IsStrictReference());
+            var bindingValue = record.GetBindingValue(reference.ReferencedName.ToString(), reference.Strict);
 
             if (returnReferenceToPool)
             {
@@ -632,32 +672,33 @@ namespace Jint
         /// </summary>
         internal void PutValue(Reference reference, JsValue value)
         {
-            var baseValue = reference.GetBase();
-            if (reference.IsUnresolvableReference())
+            if (reference.IsUnresolvableReference)
             {
-                if (reference.IsStrictReference() && reference.GetReferencedName() != CommonProperties.Arguments)
+                if (reference.Strict && reference.ReferencedName != CommonProperties.Arguments)
                 {
                     ExceptionHelper.ThrowReferenceError(Realm, reference);
                 }
 
-                Realm.GlobalObject.Set(reference.GetReferencedName(), value, throwOnError: false);
+                Realm.GlobalObject.Set(reference.ReferencedName, value, throwOnError: false);
             }
-            else if (reference.IsPropertyReference())
+            else if (reference.IsPropertyReference)
             {
-                if (reference.HasPrimitiveBase())
+                var baseObject = TypeConverter.ToObject(Realm, reference.Base);
+                if (reference.IsPrivateReference)
                 {
-                    baseValue = TypeConverter.ToObject(Realm, baseValue);
+                    baseObject.PrivateSet((PrivateName) reference.ReferencedName, value);
+                    return;
                 }
 
-                var succeeded = baseValue.Set(reference.GetReferencedName(), value, reference.GetThisValue());
-                if (!succeeded && reference.IsStrictReference())
+                var succeeded = baseObject.Set(reference.ReferencedName, value, reference.ThisValue);
+                if (!succeeded && reference.Strict)
                 {
-                    ExceptionHelper.ThrowTypeError(Realm, "Cannot assign to read only property '" + reference.GetReferencedName() + "' of " + baseValue);
+                    ExceptionHelper.ThrowTypeError(Realm, "Cannot assign to read only property '" + reference.ReferencedName + "' of " + baseObject);
                 }
             }
             else
             {
-                ((EnvironmentRecord) baseValue).SetMutableBinding(TypeConverter.ToString(reference.GetReferencedName()), value, reference.IsStrictReference());
+                ((EnvironmentRecord) reference.Base).SetMutableBinding(TypeConverter.ToString(reference.ReferencedName), value, reference.Strict);
             }
         }
 
@@ -1197,6 +1238,21 @@ namespace Jint
                 }
             }
 
+            HashSet<PrivateIdentifier>? privateIdentifiers = null;
+            var pointer = privateEnv;
+            while (pointer is not null)
+            {
+                foreach (var name in pointer.Names)
+                {
+                    privateIdentifiers??= new HashSet<PrivateIdentifier>(PrivateIdentifierNameComparer._instance);
+                    privateIdentifiers.Add(name.Key);
+                }
+
+                pointer = pointer.OuterPrivateEnvironment;
+            }
+
+            script.AllPrivateIdentifiersValid(realm, privateIdentifiers);
+
             var functionDeclarations = hoistingScope._functionDeclarations;
             var functionsToInitialize = new LinkedList<JintFunctionDefinition>();
             var declaredFunctionNames = new HashSet<string>();
@@ -1433,6 +1489,9 @@ namespace Jint
             return ((IConstructor) constructor).Construct(arguments, newTarget);
         }
 
+        internal JsValue Call(FunctionInstance functionInstance, JsValue thisObject)
+            => Call(functionInstance, thisObject, Arguments.Empty, null);
+
         internal JsValue Call(
             FunctionInstance functionInstance,
             JsValue thisObject,
@@ -1502,7 +1561,7 @@ namespace Jint
                 return;
             }
 
-#if NETSTANDARD2_1_OR_GREATER
+#if SUPPORTS_WEAK_TABLE_CLEAR
             _objectWrapperCache.Clear();
 #else
             // we can expect that reflection is OK as we've been generating object wrappers already

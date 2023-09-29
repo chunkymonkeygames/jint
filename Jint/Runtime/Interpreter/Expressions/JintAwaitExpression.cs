@@ -1,4 +1,5 @@
 using Esprima.Ast;
+using Jint.Native.Promise;
 
 namespace Jint.Runtime.Interpreter.Expressions;
 
@@ -24,6 +25,14 @@ internal sealed class JintAwaitExpression : JintExpression
         try
         {
             var value = _awaitExpression.GetValue(context);
+
+            if (value is not JsPromise)
+            {
+                var promiseInstance = new JsPromise(engine);
+                promiseInstance.Resolve(value);
+                value = promiseInstance;
+            }
+
             engine.RunAvailableContinuations();
             return value.UnwrapIfPromise();
         }

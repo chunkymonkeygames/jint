@@ -130,6 +130,8 @@ namespace Jint.Native.Object
             return null;
         }
 
+        internal void SetProperties(StringDictionarySlim<PropertyDescriptor> properties) => SetProperties(new PropertyDictionary(properties));
+
         internal void SetProperties(PropertyDictionary? properties)
         {
             if (properties != null)
@@ -412,7 +414,7 @@ namespace Jint.Native.Object
             }
 
             var functionInstance = (FunctionInstance) getter;
-            return functionInstance._engine.Call(functionInstance, thisObject, Arguments.Empty, expression: null);
+            return functionInstance._engine.Call(functionInstance, thisObject);
         }
 
         /// <summary>
@@ -553,6 +555,7 @@ namespace Jint.Native.Object
             return SetUnlikely(property, value, receiver);
         }
 
+        [MethodImpl(MethodImplOptions.NoInlining)]
         private bool SetUnlikely(JsValue property, JsValue value, JsValue receiver)
         {
             var ownDesc = GetOwnProperty(property);
@@ -1024,7 +1027,7 @@ namespace Jint.Native.Object
                     break;
 
                 case ObjectClass.RegExp:
-                    if (this is RegExpInstance regeExpInstance)
+                    if (this is JsRegExp regeExpInstance)
                     {
                         converted = regeExpInstance.Value;
                     }
@@ -1173,16 +1176,7 @@ namespace Jint.Native.Object
             return false;
         }
 
-        internal ICallable GetCallable(JsValue source)
-        {
-            if (source is ICallable callable)
-            {
-                return callable;
-            }
-
-            ExceptionHelper.ThrowTypeError(_engine.Realm, "Argument must be callable");
-            return null;
-        }
+        internal ICallable GetCallable(JsValue source) => source.GetCallable(_engine.Realm);
 
         internal bool IsConcatSpreadable
         {
@@ -1517,7 +1511,7 @@ namespace Jint.Native.Object
             }
 
             var min = length;
-            foreach (var entry in Properties)
+            foreach (var entry in GetOwnProperties())
             {
                 if (ulong.TryParse(entry.Key.ToString(), out var index))
                 {
@@ -1527,7 +1521,7 @@ namespace Jint.Native.Object
 
             if (Prototype?.Properties != null)
             {
-                foreach (var entry in Prototype.Properties)
+                foreach (var entry in Prototype.GetOwnProperties())
                 {
                     if (ulong.TryParse(entry.Key.ToString(), out var index))
                     {
@@ -1599,6 +1593,33 @@ namespace Jint.Native.Object
             }
 
             return true;
+        }
+
+        /// <summary>
+        /// https://tc39.es/ecma262/#sec-definefield
+        /// </summary>
+        internal static void DefineField(ObjectInstance receiver, ClassFieldDefinition fieldRecord)
+        {
+            var fieldName = fieldRecord.Name;
+            var initializer = fieldRecord.Initializer;
+            var initValue = Undefined;
+            if (initializer is not null)
+            {
+                initValue = receiver._engine.Call(initializer, receiver);
+                if (initValue is FunctionInstance functionInstance)
+                {
+                    functionInstance.SetFunctionName(fieldName);
+                }
+            }
+
+            if (fieldName is PrivateName privateName)
+            {
+                receiver.PrivateFieldAdd(privateName, initValue);
+            }
+            else
+            {
+                receiver.CreateDataPropertyOrThrow(fieldName, initValue);
+            }
         }
 
         internal enum IntegrityLevel

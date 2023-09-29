@@ -849,7 +849,7 @@ namespace Jint.Tests.Runtime
         {
             var e = new Engine(cfg => cfg
                 .AllowClr(typeof(Person).Assembly)
-                .SetWrapObjectHandler((engine, target) =>
+                .SetWrapObjectHandler((engine, target, type) =>
                 {
                     var instance = new ObjectWrapper(engine, target);
                     if (instance.IsArrayLike)
@@ -884,7 +884,7 @@ namespace Jint.Tests.Runtime
         {
             var engine = new Engine(opt =>
             {
-                opt.SetWrapObjectHandler((eng, obj) =>
+                opt.SetWrapObjectHandler((eng, obj, type) =>
                 {
                     var wrapper = new ObjectWrapper(eng, obj);
                     if (wrapper.IsArrayLike)
@@ -1887,6 +1887,18 @@ namespace Jint.Tests.Runtime
             RunTest(@"
                 var meta = importNamespace('Shapes.Circle.Meta');
                 var usages = meta.Usage;
+                assert(usages.Public === 0);
+                assert(usages.Private === 1);
+                assert(usages.Internal === 11);
+            ");
+        }
+
+        [Fact]
+        public void ShouldGetNestedTypeFromParentType()
+        {
+            RunTest(@"
+                var Shapes = importNamespace('Shapes');
+                var usages = Shapes.Circle.Meta.Usage;
                 assert(usages.Public === 0);
                 assert(usages.Private === 1);
                 assert(usages.Internal === 11);

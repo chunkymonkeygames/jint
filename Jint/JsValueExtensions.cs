@@ -47,8 +47,12 @@ namespace Jint
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsPromise(this JsValue value)
         {
-            return value is PromiseInstance;
+            return value is JsPromise;
         }
+
+        [Pure]
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool IsPrivateName(this JsValue value) => value._type == InternalTypes.PrivateName;
 
         [Pure]
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -65,7 +69,7 @@ namespace Jint
                 return TypeConverter.ToBoolean(matcher);
             }
 
-            return value is RegExpInstance;
+            return value is JsRegExp;
         }
 
         [Pure]
@@ -144,14 +148,14 @@ namespace Jint
         }
 
         [Pure]
-        public static RegExpInstance AsRegExp(this JsValue value)
+        public static JsRegExp AsRegExp(this JsValue value)
         {
             if (!value.IsRegExp())
             {
                 ExceptionHelper.ThrowArgumentException("The value is not a regex");
             }
 
-            return (RegExpInstance) value;
+            return (JsRegExp) value;
         }
 
         [Pure]
@@ -238,7 +242,7 @@ namespace Jint
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUint8Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Uint8 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Uint8 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -249,13 +253,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Uint8Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<byte>();
+            return ((JsTypedArray) value).ToNativeArray<byte>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUint8ClampedArray(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Uint8C };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Uint8C };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -266,13 +270,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Uint8ClampedArray");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<byte>();
+            return ((JsTypedArray) value).ToNativeArray<byte>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInt8Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Int8 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Int8 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -283,13 +287,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Int8Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<sbyte>();
+            return ((JsTypedArray) value).ToNativeArray<sbyte>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInt16Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Int16 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Int16 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -300,13 +304,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Int16Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<short>();
+            return ((JsTypedArray) value).ToNativeArray<short>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUint16Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Uint16 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Uint16 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -317,13 +321,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Uint16Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<ushort>();
+            return ((JsTypedArray) value).ToNativeArray<ushort>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsInt32Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Int32 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Int32 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -334,13 +338,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Int32Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<int>();
+            return ((JsTypedArray) value).ToNativeArray<int>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsUint32Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.Uint32 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.Uint32 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -351,13 +355,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "Uint32Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<uint>();
+            return ((JsTypedArray) value).ToNativeArray<uint>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsBigInt64Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.BigInt64 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.BigInt64 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -368,13 +372,13 @@ namespace Jint
                 ThrowWrongTypeException(value, "BigInt64Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<long>();
+            return ((JsTypedArray) value).ToNativeArray<long>();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static bool IsBigUint64Array(this JsValue value)
         {
-            return value is TypedArrayInstance { _arrayElementType: TypedArrayElementType.BigUint64 };
+            return value is JsTypedArray { _arrayElementType: TypedArrayElementType.BigUint64 };
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -385,7 +389,7 @@ namespace Jint
                 ThrowWrongTypeException(value, "BigUint64Array");
             }
 
-            return ((TypedArrayInstance) value).ToNativeArray<ulong>();
+            return ((JsTypedArray) value).ToNativeArray<ulong>();
         }
 
         [Pure]
@@ -539,7 +543,7 @@ namespace Jint
         /// <returns>inner value if Promise the value itself otherwise</returns>
         public static JsValue UnwrapIfPromise(this JsValue value)
         {
-            if (value is PromiseInstance promise)
+            if (value is JsPromise promise)
             {
                 switch (promise.State)
                 {
@@ -577,6 +581,17 @@ namespace Jint
                 ExceptionHelper.ThrowSyntaxError(engine.Realm, ex.Message);
                 return default;
             }
+        }
+
+        internal static ICallable GetCallable(this JsValue source, Realm realm)
+        {
+            if (source is ICallable callable)
+            {
+                return callable;
+            }
+
+            ExceptionHelper.ThrowTypeError(realm, "Argument must be callable");
+            return null;
         }
     }
 }

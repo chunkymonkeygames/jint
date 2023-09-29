@@ -78,6 +78,11 @@ namespace Jint.Runtime.Interpreter.Expressions
 
         protected override object EvaluateInternal(EvaluationContext context)
         {
+            if (!context.Engine._stackGuard.TryEnterOnCurrentStack())
+            {
+                return context.Engine._stackGuard.RunOnEmptyStack(EvaluateInternal, context);
+            }
+
             if (_calleeExpression._expression.Type == Nodes.Super)
             {
                 return SuperCall(context);
@@ -103,8 +108,8 @@ namespace Jint.Runtime.Interpreter.Expressions
             var referenceRecord = reference as Reference;
             if (ReferenceEquals(func, engine.Realm.Intrinsics.Eval)
                 && referenceRecord != null
-                && !referenceRecord.IsPropertyReference()
-                && referenceRecord.GetReferencedName() == CommonProperties.Eval)
+                && !referenceRecord.IsPropertyReference
+                && referenceRecord.ReferencedName == CommonProperties.Eval)
             {
                 return HandleEval(context, func, engine, referenceRecord);
             }
@@ -117,13 +122,13 @@ namespace Jint.Runtime.Interpreter.Expressions
             JsValue thisObject;
             if (referenceRecord is not null)
             {
-                if (referenceRecord.IsPropertyReference())
+                if (referenceRecord.IsPropertyReference)
                 {
-                    thisObject = referenceRecord.GetThisValue();
+                    thisObject = referenceRecord.ThisValue;
                 }
                 else
                 {
-                    var baseValue = referenceRecord.GetBase();
+                    var baseValue = referenceRecord.Base;
 
                     // deviation from the spec to support null-propagation helper
                     if (baseValue.IsNullOrUndefined()
@@ -207,7 +212,7 @@ namespace Jint.Runtime.Interpreter.Expressions
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void ThrowReferenceNotFunction(Reference? referenceRecord1, object reference, Engine engine)
         {
-            var message = $"{referenceRecord1?.GetReferencedName() ?? reference} is not a function";
+            var message = $"{referenceRecord1?.ReferencedName ?? reference} is not a function";
             ExceptionHelper.ThrowTypeError(engine.Realm, message);
         }
 
@@ -217,7 +222,7 @@ namespace Jint.Runtime.Interpreter.Expressions
         {
             var message = referenceRecord1 == null
                 ? reference + " is not a function"
-                : $"Property '{referenceRecord1.GetReferencedName()}' of object is not a function";
+                : $"Property '{referenceRecord1.ReferencedName}' of object is not a function";
             ExceptionHelper.ThrowTypeError(engine.Realm, message);
         }
 
@@ -253,8 +258,14 @@ namespace Jint.Runtime.Interpreter.Expressions
             var defaultSuperCall = ReferenceEquals(_expression, ClassDefinition._defaultSuperCall);
             var argList = defaultSuperCall ? DefaultSuperCallArgumentListEvaluation(context) : ArgumentListEvaluation(context);
             var result = ((IConstructor) func).Construct(argList, newTarget);
+
             var thisER = (FunctionEnvironmentRecord) engine.ExecutionContext.GetThisEnvironment();
-            return thisER.BindThisValue(result);
+            thisER.BindThisValue(result);
+            var F = thisER._functionObject;
+
+            result.InitializeInstanceElements((ScriptFunctionInstance) F);
+
+            return result;
         }
 
         /// <summary>

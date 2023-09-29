@@ -9,19 +9,22 @@ using Jint.Runtime.Interop;
 using Jint.Runtime.Debugger;
 using Jint.Runtime.Descriptors;
 using Jint.Runtime.Modules;
+using Jint.Runtime.CallStack;
 
 namespace Jint
 {
     public delegate JsValue? MemberAccessorDelegate(Engine engine, object target, string member);
 
-    public delegate ObjectInstance? WrapObjectDelegate(Engine engine, object target);
+    public delegate ObjectInstance? WrapObjectDelegate(Engine engine, object target, Type? type);
 
     public delegate bool ExceptionHandlerDelegate(Exception exception);
 
     public class Options
     {
-        private ITimeSystem? _timeSystem;
+        private static readonly CultureInfo _defaultCulture = CultureInfo.CurrentCulture;
+        private static readonly TimeZoneInfo _defaultTimeZone = TimeZoneInfo.Local;
 
+        private ITimeSystem? _timeSystem;
         internal List<Action<Engine>> _configurations { get; } = new();
 
         /// <summary>
@@ -57,7 +60,7 @@ namespace Jint
         /// <summary>
         /// The culture the engine runs on, defaults to current culture.
         /// </summary>
-        public CultureInfo Culture { get; set; } = CultureInfo.CurrentCulture;
+        public CultureInfo Culture { get; set; } = _defaultCulture;
 
 
         /// <summary>
@@ -72,7 +75,7 @@ namespace Jint
         /// <summary>
         /// The time zone the engine runs on, defaults to local. Same as setting DefaultTimeSystem with the time zone.
         /// </summary>
-        public TimeZoneInfo TimeZone { get; set; } = TimeZoneInfo.Local;
+        public TimeZoneInfo TimeZone { get; set; } = _defaultTimeZone;
 
         /// <summary>
         /// Reference resolver allows customizing behavior for reference resolving. This can be useful in cases where
@@ -105,7 +108,7 @@ namespace Jint
         {
             foreach (var configuration in _configurations)
             {
-                configuration?.Invoke(engine);
+                configuration(engine);
             }
 
             // add missing bits if needed
@@ -118,6 +121,9 @@ namespace Jint
                         "importNamespace",
                         (thisObj, arguments) =>
                             new NamespaceReference(engine, TypeConverter.ToString(arguments.At(0)))),
+                    PropertyFlag.AllForbidden));
+                engine.Realm.GlobalObject.SetProperty("clrHelper", new PropertyDescriptor(
+                    new ObjectWrapper(engine, new ClrHelper(Interop)),
                     PropertyFlag.AllForbidden));
             }
 
@@ -141,9 +147,6 @@ namespace Jint
             }
 
             engine.ModuleLoader = Modules.ModuleLoader;
-
-            // ensure defaults
-            engine.ClrTypeConverter ??= new DefaultTypeConverter(engine);
         }
 
         private static void AttachExtensionMethodsToPrototypes(Engine engine)
@@ -166,12 +169,10 @@ namespace Jint
 
             foreach (var overloads in methods.GroupBy(x => x.Name))
             {
+                string name = overloads.Key;
                 PropertyDescriptor CreateMethodInstancePropertyDescriptor(ClrFunctionInstance? function)
                 {
-                    var instance = function is null
-                        ? new MethodInfoFunctionInstance(engine, MethodDescriptor.Build(overloads.ToList()))
-                        : new MethodInfoFunctionInstance(engine, MethodDescriptor.Build(overloads.ToList()), function);
-
+                    var instance = new MethodInfoFunctionInstance(engine, objectType, name, MethodDescriptor.Build(overloads.ToList()), function);
                     return new PropertyDescriptor(instance, PropertyFlag.AllForbidden);
                 }
 
@@ -281,7 +282,7 @@ namespace Jint
         /// ObjectInstance using class ObjectWrapper. This function can be used to
         /// change the behavior.
         /// </summary>
-        public WrapObjectDelegate WrapObjectHandler { get; set; } = static (engine, target) => new ObjectWrapper(engine, target);
+        public WrapObjectDelegate WrapObjectHandler { get; set; } = static (engine, target, type) => new ObjectWrapper(engine, target, type);
 
         /// <summary>
         ///
@@ -384,6 +385,16 @@ namespace Jint
         /// Maximum recursion depth allowed, defaults to -1 (no checks).
         /// </summary>
         public int MaxRecursionDepth { get; set; } = -1;
+
+        /// <summary>
+        /// Maximum recursion stack count, defaults to -1 (as-is dotnet stacktrace).
+        /// </summary>
+        /// <remarks>
+        /// Chrome and V8 based engines (ClearScript) that can handle 13955.
+        /// When set to a different value except -1, it can reduce slight performance/stack trace readability drawback. (after hitting the engine's own limit),
+        /// When max stack size to be exceeded, Engine throws an exception <see cref="JavaScriptException">.
+        /// </remarks>
+        public int MaxExecutionStackCount { get; set; } = StackGuard.Disabled;
 
         /// <summary>
         /// Maximum time a Regex is allowed to run, defaults to 10 seconds.

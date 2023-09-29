@@ -37,7 +37,7 @@ public sealed record ManualPromise(
 );
 
 
-internal sealed class PromiseInstance : ObjectInstance
+internal sealed class JsPromise : ObjectInstance
 {
     internal PromiseState State { get; private set; }
 
@@ -47,7 +47,7 @@ internal sealed class PromiseInstance : ObjectInstance
     internal List<PromiseReaction> PromiseRejectReactions = new();
     internal List<PromiseReaction> PromiseFulfillReactions = new();
 
-    internal PromiseInstance(Engine engine) : base(engine)
+    internal JsPromise(Engine engine) : base(engine)
     {
     }
 
@@ -83,11 +83,15 @@ internal sealed class PromiseInstance : ObjectInstance
     }
 
     // https://tc39.es/ecma262/#sec-promise-resolve-functions
-    private JsValue Resolve(JsValue thisObj, JsValue[] arguments)
+    private JsValue Resolve(JsValue thisObject, JsValue[] arguments)
+    {
+        var result = arguments.At(0);
+        return Resolve(result);
+    }
+
+    internal JsValue Resolve(JsValue result)
     {
         // Note that alreadyResolved logic lives in CreateResolvingFunctions method
-
-        var result = arguments.At(0);
 
         if (ReferenceEquals(result, this))
         {
@@ -114,14 +118,15 @@ internal sealed class PromiseInstance : ObjectInstance
             return FulfillPromise(result);
         }
 
-        _engine.AddToEventLoop(
-            PromiseOperations.NewPromiseResolveThenableJob(this, resultObj, thenMethod));
+        var realm = _engine.Realm;
+        var job = PromiseOperations.NewPromiseResolveThenableJob(this, resultObj, thenMethod);
+        _engine._host.HostEnqueuePromiseJob(job, realm);
 
         return Undefined;
     }
 
     // https://tc39.es/ecma262/#sec-promise-reject-functions
-    private JsValue Reject(JsValue thisObj, JsValue[] arguments)
+    private JsValue Reject(JsValue thisObject, JsValue[] arguments)
     {
         // Note that alreadyResolved logic lives in CreateResolvingFunctions method
 

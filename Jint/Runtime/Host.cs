@@ -140,13 +140,13 @@ namespace Jint.Runtime
                 promise.Reject(ex.Error);
             }
 
-            FinishDynamicImport(referencingModule, specifier, promiseCapability, (PromiseInstance) promise.Promise);
+            FinishDynamicImport(referencingModule, specifier, promiseCapability, (JsPromise) promise.Promise);
         }
 
         /// <summary>
         /// https://tc39.es/ecma262/#sec-finishdynamicimport
         /// </summary>
-        internal virtual void FinishDynamicImport(IScriptOrModule? referencingModule, string specifier, PromiseCapability promiseCapability, PromiseInstance innerPromise)
+        internal virtual void FinishDynamicImport(IScriptOrModule? referencingModule, string specifier, PromiseCapability promiseCapability, JsPromise innerPromise)
         {
             var onFulfilled = new ClrFunctionInstance(Engine, "", (thisObj, args) =>
             {
@@ -201,6 +201,14 @@ namespace Jint.Runtime
         internal virtual JobCallback MakeJobCallBack(ICallable cleanupCallback)
         {
             return new JobCallback(cleanupCallback, null);
+        }
+
+        /// <summary>
+        /// https://tc39.es/ecma262/#sec-hostenqueuepromisejob
+        /// </summary>
+        internal void HostEnqueuePromiseJob(Action job, Realm realm)
+        {
+            Engine.AddToEventLoop(job);
         }
     }
 }

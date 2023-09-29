@@ -124,6 +124,7 @@ namespace Jint.Runtime.Interpreter.Expressions
                 Nodes.ConditionalExpression => new JintConditionalExpression((ConditionalExpression) expression),
                 Nodes.FunctionExpression => new JintFunctionExpression((FunctionExpression) expression),
                 Nodes.Identifier => new JintIdentifierExpression((Identifier) expression),
+                Nodes.PrivateIdentifier => new JintPrivateIdentifierExpression((PrivateIdentifier) expression),
                 Nodes.Literal => JintLiteralExpression.Build((Literal) expression),
                 Nodes.LogicalExpression => ((BinaryExpression) expression).Operator switch
                 {
@@ -143,7 +144,7 @@ namespace Jint.Runtime.Interpreter.Expressions
                 Nodes.TemplateLiteral => new JintTemplateLiteralExpression((TemplateLiteral) expression),
                 Nodes.TaggedTemplateExpression => new JintTaggedTemplateExpression((TaggedTemplateExpression) expression),
                 Nodes.ClassExpression => new JintClassExpression((ClassExpression) expression),
-                Nodes.Import => new JintImportExpression((Import) expression),
+                Nodes.ImportExpression => new JintImportExpression((ImportExpression) expression),
                 Nodes.Super => new JintSuperExpression((Super) expression),
                 Nodes.MetaProperty => new JintMetaPropertyExpression((MetaProperty) expression),
                 Nodes.ChainExpression => ((ChainExpression) expression).Expression.Type == Nodes.CallExpression
@@ -476,7 +477,7 @@ namespace Jint.Runtime.Interpreter.Expressions
                 _instance = instance;
             }
 
-            protected override void ProcessItem(JsValue[] args, JsValue currentValue)
+            protected override void ProcessItem(JsValue[] arguments, JsValue currentValue)
             {
                 _instance.Add(currentValue);
             }
